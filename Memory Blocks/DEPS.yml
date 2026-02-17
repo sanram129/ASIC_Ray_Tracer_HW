@@ -1,0 +1,22 @@
+# DEPS configuration for voxel memory block testbenches
+
+# Testbench for voxel_addr_map
+tb_voxel_addr_map:
+  deps:
+    - mem_blocks.sv
+    - voxel_addr_map_tb.sv
+  top: voxel_addr_map_tb
+
+# Testbench for voxel_ram
+tb_voxel_ram:
+  deps:
+    - mem_blocks.sv
+    - voxel_ram_tb.sv
+  top: voxel_ram_tb
+
+# Testbench for scene_loader_if
+tb_scene_loader_if:
+  deps:
+    - mem_blocks.sv
+    - scene_loader_if_tb.sv
+  top: scene_loader_if_tb
