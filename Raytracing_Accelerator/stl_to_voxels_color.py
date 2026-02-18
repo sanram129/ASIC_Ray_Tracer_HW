@@ -335,6 +335,112 @@ def write_color_memory_files(occ, colors, output_dir):
     print(f"  Format: RGB565 (16-bit)")
     
 # ============================================================================
+# BACKWARD COMPATIBILITY FUNCTIONS FOR rays_to_scene.py
+# ============================================================================
+
+class NormalizeTransform:
+    """Simple container for normalization transform data"""
+    def __init__(self, scale, offset, in_bounds_min, in_bounds_max):
+        self.scale = scale
+        self.offset = offset
+        self.in_bounds_min = in_bounds_min
+        self.in_bounds_max = in_bounds_max
+
+def normalize_to_unit_cube(mesh, pad=0.01):
+    """
+    Normalize mesh to fit in [0,1]^3 with padding.
+    Returns (normalized_mesh, transform_info)
+    """
+    bounds = mesh.bounds
+    in_bounds_min = bounds[0]
+    in_bounds_max = bounds[1]
+    
+    size = in_bounds_max - in_bounds_min
+    max_size = max(size)
+    scale = (1.0 - 2*pad) / max_size
+    
+    center = (in_bounds_min + in_bounds_max) / 2
+    offset = np.array([0.5, 0.5, 0.5]) - center * scale
+    
+    # Apply transformation
+    normalized_mesh = mesh.copy()
+    normalized_mesh.apply_scale(scale)
+    normalized_mesh.apply_translation(offset)
+    
+    tf = NormalizeTransform(scale, offset, in_bounds_min, in_bounds_max)
+    return normalized_mesh, tf
+
+def voxelize_by_center_contains(mesh, n=32):
+    """
+    Voxelize mesh using center-contains method.
+    Returns bool array (n, n, n)
+    """
+    pitch = 1.0 / n
+    voxel_grid = mesh.voxelized(pitch=pitch, max_iter=100)
+    matrix = voxel_grid.matrix
+    
+    # Resize if needed
+    if matrix.shape != (n, n, n):
+        from scipy.ndimage import zoom
+        scale = np.array([n / matrix.shape[i] for i in range(3)])
+        matrix = zoom(matrix.astype(float), scale, order=0) > 0.5
+    
+    return matrix
+
+def create_downsampled_with_walls(occ_full):
+    """
+    Create 32x32x32 scene with downsampled 16x16x16 model, floor, and walls.
+    Compatible with non-color version.
+    """
+    result = np.zeros((32, 32, 32), dtype=bool)
+    
+    # Downsample (every 2nd voxel)
+    downsampled = occ_full[::2, ::2, ::2]
+    
+    # Place at (3-18, 3-18, 1-16)
+    result[3:19, 3:19, 1:17] = downsampled
+    
+    # Floor at z=0
+    result[:, :, 0] = True
+    
+    # Walls at x=0, y=0
+    result[0, :, :] = True
+    result[:, 0, :] = True
+    
+    return result
+
+def write_voxels_mem(occ, filepath):
+    """
+    Write occupancy array to .mem file (one bit per line).
+    Compatible with non-color version.
+    """
+    depth = 32
+    with open(filepath, 'w') as f:
+        for z in range(depth):
+            for y in range(depth):
+                for x in range(depth):
+                    bit = '1' if occ[x, y, z] else '0'
+                    f.write(f"{bit}\n")
+
+def write_voxels_load_txt(occ, filepath):
+    """
+    Write occupancy array to load.txt file (address + bit format).
+    Compatible with non-color version.
+    """
+    depth = 32
+    with open(filepath, 'w') as f:
+        f.write("// Voxel Memory Load File\n")
+        f.write("// Format: address(decimal) bit\n")
+        f.write("// Address = (z<<10) | (y<<5) | x\n\n")
+        
+        for z in range(depth):
+            for y in range(depth):
+                for x in range(depth):
+                    if occ[x, y, z]:
+                        addr = (z << 10) | (y << 5) | x
+                        f.write(f"{addr:5d} 1\n")
+
+# ============================================================================
 # MAIN
 # ============================================================================
 

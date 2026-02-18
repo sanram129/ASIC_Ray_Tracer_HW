@@ -27,8 +27,8 @@ from typing import Tuple
 
 import numpy as np
 
-# Import your voxelizer module (keep this file in the same folder as stl_to_voxels.py)
-import stl_to_voxels  # :contentReference[oaicite:4]{index=4}
+# Import your voxelizer module
+import stl_to_voxels_color as stl_to_voxels
 
 
 N = 32
