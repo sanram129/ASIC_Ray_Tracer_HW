@@ -1,0 +1,52 @@
+# =============================================================================
+# DEPS.yml - Voxel Raycasting Accelerator Build Configuration
+# =============================================================================
+
+# Design-under-test modules (for standalone synthesis/analysis)
+dut_voxel_addr_map:
+  deps:
+    - voxel_addr_map.sv
+
+dut_voxel_ram:
+  deps:
+    - voxel_ram.sv
+
+dut_shade_lut:
+  deps:
+    - shade_lut.sv
+
+dut_ray_job_if:
+  deps:
+    - ray_job_if.sv
+
+dut_scene_loader_if:
+  deps:
+    - scene_loader_if.sv
+
+dut_dda_stepper:
+  deps:
+    - dda_stepper.sv
+
+dut_raycast_top:
+  deps:
+    - voxel_addr_map.sv
+    - voxel_ram.sv
+    - shade_lut.sv
+    - ray_job_if.sv
+    - scene_loader_if.sv
+    - dda_stepper.sv
+    - raycast_top.sv
+  top: raycast_top
+
+# Full system testbench
+tb_raycast:
+  deps:
+    - voxel_addr_map.sv
+    - voxel_ram.sv
+    - shade_lut.sv
+    - ray_job_if.sv
+    - scene_loader_if.sv
+    - dda_stepper.sv
+    - raycast_top.sv
+    - tb_raycast_top.sv
+  top: tb_raycast_top
