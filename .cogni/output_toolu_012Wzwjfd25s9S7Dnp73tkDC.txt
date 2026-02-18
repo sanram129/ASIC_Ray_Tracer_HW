@@ -1,0 +1,14 @@
+=== Command: gtkwave --version (2026-02-18T19:24:33.753Z) ===
+Exit Code: 1
+Output:
+gtkwave : The term 'gtkwave' is not recognized as the name of a cmdlet, function, script file, or operable program. 
+Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ gtkwave --version
++ ~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (gtkwave:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+
+=== End Output ===
+

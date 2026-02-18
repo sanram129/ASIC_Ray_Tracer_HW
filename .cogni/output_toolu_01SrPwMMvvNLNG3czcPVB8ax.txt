@@ -1,0 +1,47 @@
+=== Command: cd Raytracing_Accelerator_new; vvp tb_simple.vvp 2>&1 | Select-String -Pattern "TEST|PASS|FAIL|SUMMARY" -Context 0,1 (2026-02-18T19:42:34.517Z) ===
+Exit Code: 0
+Output:
+
+> TEST START
+  =============================================================================
+> Testing: Full integration with 5-stage pipeline and FSM
+  =============================================================================
+> === EDGE CASE TESTS ===
+  
+> [TEST 1] Simple X-axis ray
+  [145000] Loading scene...
+>   PASS: Hit voxel at (5,0,0)
+  
+> [TEST 2] Boundary test
+  [328355000] Loading scene...
+>   FAIL: Expected out of bounds, got hit=0 timeout=1
+  
+> [TEST 3] Immediate hit
+  [656365000] Loading scene...
+>   PASS: Immediate hit detected
+  
+> [TEST 4] Timeout
+  [984275000] Loading scene...
+>   PASS: Timeout detected after 5 steps
+  
+> [TEST 5] Diagonal ray
+  [1312235000] Loading scene...
+>   FAIL: Expected hit at (15,15,15), got (10,10,10)
+  
+> [RANDOM TESTS] Running 1000 tests...
+  [1640645000] Loading scene...
+> [RANDOM TESTS] Completed: 0 / 1000
+  
+> TEST SUMMARY
+  =============================================================================
+> Total tests:  1005
+> Passed:       3
+> Failed:       2
+  =============================================================================
+> TEST FAILED
+  tb_raytracer_simple.sv:433: $finish called at 35110995000 (1ps)
+
+
+
+=== End Output ===
+

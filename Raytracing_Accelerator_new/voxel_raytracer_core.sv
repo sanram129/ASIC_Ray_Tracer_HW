@@ -5,6 +5,26 @@
 // Module: voxel_raytracer_core
 // Description: Clocked voxel raytracer core with pipelined datapath
 //              Integrates all traversal and memory modules with proper clocking
+//
+// PIPELINE STAGES (5 total):
+//   Stage 1: Input registers (latch current position and timers)
+//   Stage 2: axis_choose - determine which axis has minimum timer (combinational)
+//   Stage 3: step_update - compute next position and updated timers (combinational)
+//   Stage 4: bounds_check + voxel_addr_map - check bounds, compute RAM address
+//   Stage 5: voxel_ram - synchronous read (2-cycle internal latency)
+//
+// IMPORTANT TIMING NOTES:
+//   - Total latency: 5 cycles from step_valid_in to step_valid_out
+//   - bounds_check operates on NEXT position (ix_s3/iy_s3/iz_s3)
+//   - voxel_addr_map uses CURRENT position (ix_s3_curr/iy_s3_curr/iz_s3_curr)
+//   - voxel_occupied_out reflects the voxel at the CURRENT input position from 5 cycles earlier
+//   - out_of_bounds_out reflects bounds check of NEXT position from 5 cycles earlier
+//
+// RAM ADDRESS HANDLING:
+//   - voxel_addr_s4 is combinational output from voxel_addr_map
+//   - voxel_ram internally registers the address (raddr_q), then reads on next cycle
+//   - Total RAM latency: 2 cycles (address register + data output register)
+//
 // =============================================================================
 module voxel_raytracer_core #(
     parameter int W = 32,           // Timer width
@@ -40,7 +60,7 @@ module voxel_raytracer_core #(
     output logic [ADDR_BITS:0]   write_count,
     output logic                 load_complete,
     
-    // Ray Step Outputs (pipelined)
+    // Ray Step Outputs (pipelined - available 5 cycles after inputs)
     output logic [4:0]           ix_out,
     output logic [4:0]           iy_out,
     output logic [4:0]           iz_out,
@@ -81,6 +101,7 @@ module voxel_raytracer_core #(
     
     // =========================================================================
     // Pipeline Stage 2: axis_choose (Combinational)
+    // Purpose: Determine which axis to step based on minimum timer value
     // =========================================================================
     logic [2:0] step_mask_s2;
     logic [1:0] primary_sel_s2;
@@ -124,6 +145,7 @@ module voxel_raytracer_core #(
     
     // =========================================================================
     // Pipeline Stage 3: step_update (Combinational)
+    // Purpose: Compute next voxel position and updated timer values
     // =========================================================================
     logic [4:0]  ix_next_s3, iy_next_s3, iz_next_s3;
     logic [W-1:0] next_x_next_s3, next_y_next_s3, next_z_next_s3;
@@ -156,7 +178,11 @@ module voxel_raytracer_core #(
     );
     
     // Register stage 3 outputs
-    logic [4:0]  ix_s3, iy_s3, iz_s3;
+    // CRITICAL: We need both CURRENT and NEXT positions!
+    // - CURRENT position (ix_s3_curr) is used for voxel RAM lookup
+    // - NEXT position (ix_s3) is used for bounds check and next iteration
+    logic [4:0]  ix_s3_curr, iy_s3_curr, iz_s3_curr;  // CURRENT position
+    logic [4:0]  ix_s3, iy_s3, iz_s3;                 // NEXT position
     logic [W-1:0] next_x_s3, next_y_s3, next_z_s3;
     logic [2:0]  face_mask_s3_q;
     logic [2:0]  primary_face_id_s3_q;
@@ -164,15 +190,23 @@ module voxel_raytracer_core #(
     
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
+            ix_s3_curr <= '0; iy_s3_curr <= '0; iz_s3_curr <= '0;
             ix_s3 <= '0; iy_s3 <= '0; iz_s3 <= '0;
             next_x_s3 <= '0; next_y_s3 <= '0; next_z_s3 <= '0;
             face_mask_s3_q <= '0;
             primary_face_id_s3_q <= '0;
             valid_s3 <= '0;
         end else begin
+            // Capture CURRENT position (from stage 2) for voxel lookup
+            ix_s3_curr <= ix_s2;
+            iy_s3_curr <= iy_s2;
+            iz_s3_curr <= iz_s2;
+            
+            // Capture NEXT position (from step_update) for bounds check
             ix_s3 <= ix_next_s3;
             iy_s3 <= iy_next_s3;
             iz_s3 <= iz_next_s3;
+            
             next_x_s3 <= next_x_next_s3;
             next_y_s3 <= next_y_next_s3;
             next_z_s3 <= next_z_next_s3;
@@ -184,12 +218,20 @@ module voxel_raytracer_core #(
     
     // =========================================================================
     // Pipeline Stage 4: bounds_check & voxel_addr_map (Combinational)
+    // Purpose: Check if NEXT position is within bounds, compute RAM address for CURRENT position
+    // 
+    // FIXED: Now correctly uses separate positions for each purpose:
+    // - bounds_check examines ix_s3/iy_s3/iz_s3 (NEXT position after stepping)
+    // - voxel_addr_map uses ix_s3_curr/iy_s3_curr/iz_s3_curr (CURRENT position)
+    // 
+    // This ensures we check occupancy of the voxel we're AT, not the voxel we're GOING TO.
     // =========================================================================
     logic [5:0] bounds_ix, bounds_iy, bounds_iz;
     logic out_of_bounds_s4;
     logic [ADDR_BITS-1:0] voxel_addr_s4;
     
-    // Zero-extend coordinates for bounds check
+    // Zero-extend coordinates for bounds check (5-bit -> 6-bit)
+    // Check if NEXT position is out of bounds
     assign bounds_ix = {1'b0, ix_s3};
     assign bounds_iy = {1'b0, iy_s3};
     assign bounds_iz = {1'b0, iz_s3};
@@ -204,20 +246,21 @@ module voxel_raytracer_core #(
         .out_of_bounds(out_of_bounds_s4)
     );
     
+    // Compute RAM address for CURRENT position (FIXED!)
     voxel_addr_map #(
         .X_BITS(5),
         .Y_BITS(5),
         .Z_BITS(5),
         .MAP_ZYX(1'b1)
     ) u_voxel_addr_map (
-        .x(ix_s3),
-        .y(iy_s3),
-        .z(iz_s3),
+        .x(ix_s3_curr),  // Use CURRENT position for voxel lookup
+        .y(iy_s3_curr),
+        .z(iz_s3_curr),
         .addr(voxel_addr_s4)
     );
     
     // Register stage 4 outputs
-    logic [4:0]  ix_s4, iy_s4, iz_s4;
+    logic [4:0]  ix_s4, iy_s4, iz_s4;  // NEXT position (for output)
     logic [W-1:0] next_x_s4, next_y_s4, next_z_s4;
     logic [2:0]  face_mask_s4;
     logic [2:0]  primary_face_id_s4;
@@ -235,6 +278,7 @@ module voxel_raytracer_core #(
             voxel_addr_s4_q <= '0;
             valid_s4 <= '0;
         end else begin
+            // Propagate NEXT position (ix_s3 is next position)
             ix_s4 <= ix_s3;
             iy_s4 <= iy_s3;
             iz_s4 <= iz_s3;
@@ -251,6 +295,11 @@ module voxel_raytracer_core #(
     
     // =========================================================================
     // Pipeline Stage 5: voxel_ram read & scene_loader_if (Synchronous)
+    // Purpose: Read voxel occupancy from RAM, handle scene loading
+    // RAM TIMING: voxel_ram has internal 2-cycle latency:
+    //   Cycle N:   raddr input = voxel_addr_s4 (combinational from stage 4)
+    //   Cycle N+1: RAM internally registers address (raddr_q)
+    //   Cycle N+2: RAM reads mem[raddr_q] and registers output (rdata)
     // =========================================================================
     logic voxel_occupied_s5;
     logic we_ram;
@@ -282,7 +331,11 @@ module voxel_raytracer_core #(
     ) u_voxel_ram (
         .clk(clk),
         .rst_n(rst_n),
-        .raddr(voxel_addr_s4),  // Use combinational address directly, not registered!
+        // RAM address input: combinational output from voxel_addr_map (stage 4)
+        // The voxel_ram module internally registers this address as raddr_q,
+        // then performs synchronous read on the next cycle. Total RAM latency
+        // is 2 cycles: address register + data output register.
+        .raddr(voxel_addr_s4),
         .rdata(voxel_occupied_s5),
         .we(we_ram),
         .waddr(waddr_ram),
@@ -331,7 +384,7 @@ module voxel_raytracer_core #(
     assign face_mask_out = face_mask_s5;
     assign primary_face_id_out = primary_face_id_s5;
     assign out_of_bounds_out = out_of_bounds_s5;
-    assign voxel_occupied_out = voxel_occupied_s5;  // RAM output - synchronous read
+    assign voxel_occupied_out = voxel_occupied_s5;  // RAM output - synchronous read (2-cycle latency)
     assign step_valid_out = valid_s5;
 
 endmodule

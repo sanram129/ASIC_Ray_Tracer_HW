@@ -1,0 +1,13 @@
+=== Command: cd Raytracing_Accelerator_new; ls -la tb_simple.vvp (2026-02-18T19:31:26.251Z) ===
+Exit Code: 1
+Output:
+Get-ChildItem : A parameter cannot be found that matches parameter name 'la'.
+At line:1 char:35
++ cd Raytracing_Accelerator_new; ls -la tb_simple.vvp
++                                   ~~~
+    + CategoryInfo          : InvalidArgument: (:) [Get-ChildItem], ParameterBindingException
+    + FullyQualifiedErrorId : NamedParameterNotFound,Microsoft.PowerShell.Commands.GetChildItemCommand
+ 
+
+=== End Output ===
+

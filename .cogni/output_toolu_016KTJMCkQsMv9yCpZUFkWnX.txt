@@ -1,0 +1,28 @@
+=== Command: pip install numpy trimesh scipy (2026-02-18T19:11:35.752Z) ===
+Exit Code: 0
+Output:
+Defaulting to user installation because normal site-packages is not writeable
+Collecting numpy
+  Downloading numpy-2.4.2-cp313-cp313-win_amd64.whl.metadata (6.6 kB)
+Collecting trimesh
+  Downloading trimesh-4.11.2-py3-none-any.whl.metadata (13 kB)
+Collecting scipy
+  Downloading scipy-1.17.0-cp313-cp313-win_amd64.whl.metadata (60 kB)
+Downloading numpy-2.4.2-cp313-cp313-win_amd64.whl (12.3 MB)
+   ---------------------------------------- 12.3/12.3 MB 8.4 MB/s eta 0:00:00
+Downloading trimesh-4.11.2-py3-none-any.whl (740 kB)
+   ---------------------------------------- 740.3/740.3 kB 4.5 MB/s eta 0:00:00
+Downloading scipy-1.17.0-cp313-cp313-win_amd64.whl (36.3 MB)
+   ---------------------------------------- 36.3/36.3 MB 2.7 MB/s eta 0:00:00
+Installing collected packages: numpy, trimesh, scipy
+  WARNING: The scripts f2py.exe and numpy-config.exe are installed in 'C:\Users\parth\AppData\Roaming\Python\Python313\Scripts' which is not on PATH.
+  Consider adding this directory to PATH or, if you prefer to suppress this warning, use --no-warn-script-location.
+  WARNING: The script trimesh.exe is installed in 'C:\Users\parth\AppData\Roaming\Python\Python313\Scripts' which is not on PATH.
+  Consider adding this directory to PATH or, if you prefer to suppress this warning, use --no-warn-script-location.
+Successfully installed numpy-2.4.2 scipy-1.17.0 trimesh-4.11.2
+
+[notice] A new release of pip is available: 25.0.1 -> 26.0.1
+[notice] To update, run: python.exe -m pip install --upgrade pip
+
+=== End Output ===
+

@@ -11,14 +11,37 @@
 //
 // This top-level module resolves all interface compatibility issues and
 // connects the FSM control flow with the pipelined datapath.
+//
+// PIPELINE LATENCY:
+//   The voxel_raytracer_core has a 5-cycle latency from step_valid_in to 
+//   step_valid_out. The FSM waits for solid_valid (= step_valid_out) before
+//   loading pipeline results. Pipeline stages:
+//     Cycle 1: Input registers
+//     Cycle 2: axis_choose (combinational) + register
+//     Cycle 3: step_update (combinational) + register
+//     Cycle 4: bounds_check + voxel_addr_map (combinational) + register
+//     Cycle 5: voxel_ram read (synchronous) + register
+//   
+//   TIMING: When FSM is at position P:
+//     - FSM outputs position P to pipeline
+//     - 5 cycles later: pipeline returns next position (P+1) and voxel 
+//       occupancy for position P
+//     - FSM loads P+1 if voxel at P is empty, else terminates
+//
+// BOUNDS CHECKING:
+//   The pipeline checks bounds on the NEXT position (after stepping), not
+//   the current position. This prevents stepping into invalid memory before
+//   detecting the bounds violation.
+//
 // =============================================================================
 module raytracer_top #(
     // Coordinate and timer parameters
-    parameter int COORD_WIDTH = 16,        // Voxel coordinate width for FSM
-    parameter int COORD_W = 6,             // Coordinate width for bounds check
+    parameter int COORD_WIDTH = 16,        // Voxel coordinate width for FSM results
+                                           // (over-provisioned for future expansion)
+    parameter int COORD_W = 6,             // Coordinate width for bounds check (6-bit)
     parameter int TIMER_WIDTH = 32,        // Timer value width (fixed-point)
-    parameter int W = 32,                  // Timer width for pipeline
-    parameter int MAX_VAL = 31,            // Max coordinate value (0..31)
+    parameter int W = 32,                  // Timer width for pipeline (must match TIMER_WIDTH)
+    parameter int MAX_VAL = 31,            // Max coordinate value (0..31 for 32^3 grid)
     
     // Address and step parameters
     parameter int ADDR_BITS = 15,          // Memory address bits (32^3 = 2^15)
@@ -92,7 +115,7 @@ module raytracer_top #(
     logic [W-1:0]                  inc_x_q, inc_y_q, inc_z_q;
     logic [MAX_STEPS_BITS-1:0]     max_steps_q;
     
-    // FSM to core signals
+    // FSM to core signals (current state for pipeline input)
     logic                          step_valid;
     logic [X_BITS-1:0]             current_ix;
     logic [Y_BITS-1:0]             current_iy;
@@ -101,7 +124,7 @@ module raytracer_top #(
     logic [W-1:0]                  current_next_y;
     logic [W-1:0]                  current_next_z;
     
-    // Core to FSM feedback
+    // Core to FSM feedback (pipeline computed next state)
     logic [X_BITS-1:0]             next_ix;
     logic [Y_BITS-1:0]             next_iy;
     logic [Z_BITS-1:0]             next_iz;
@@ -110,9 +133,9 @@ module raytracer_top #(
     logic [W-1:0]                  next_next_z;
     logic [2:0]                    face_mask;
     logic [2:0]                    primary_face_id;
-    logic                          out_of_bounds;
-    logic                          voxel_occupied;
-    logic                          step_valid_out;
+    logic                          out_of_bounds;      // Bounds check for NEXT position
+    logic                          voxel_occupied;     // Occupancy of CURRENT position
+    logic                          step_valid_out;     // Pipeline output valid (5 cycles after input)
     
     // FSM control signals
     logic                          fsm_ready;
@@ -179,7 +202,6 @@ module raytracer_top #(
     // Module Instantiation: step_control_fsm
     // =========================================================================
     // Note: FSM uses different clock/reset naming (clock/reset vs clk/rst_n)
-    //       and different parameter widths
     
     step_control_fsm #(
         .X_BITS(X_BITS),
@@ -194,25 +216,27 @@ module raytracer_top #(
         // Job control
         .job_loaded(job_loaded),
         .ready(fsm_ready),
-        .active(fsm_active),
+        .active(fsm_active),            // Drives pipeline step_valid_in
         
-        // Job parameters (direct connection, no width conversion needed)
+        // Job parameters (direct connection for coordinate bits)
         .job_init_x(ix0_q),
         .job_init_y(iy0_q),
         .job_init_z(iz0_q),
-        .job_timer_x({{(TIMER_WIDTH-W){1'b0}}, next_x_q}),
+        .job_timer_x({{(TIMER_WIDTH-W){1'b0}}, next_x_q}),  // Zero-extend if needed
         .job_timer_y({{(TIMER_WIDTH-W){1'b0}}, next_y_q}),
         .job_timer_z({{(TIMER_WIDTH-W){1'b0}}, next_z_q}),
         .max_steps({{(STEP_COUNT_WIDTH-MAX_STEPS_BITS){1'b0}}, max_steps_q}),
         
         // Voxel data from RAM (via core pipeline)
+        // Note: voxel_occupied corresponds to the position from 5 cycles earlier
         .solid_bit(voxel_occupied),
-        .solid_valid(step_valid_out),   // Use pipeline valid as data valid
+        .solid_valid(step_valid_out),   // Pipeline output valid after 5 cycles
         
         // Bounds checking
+        // Note: out_of_bounds checks the NEXT position (prevents invalid stepping)
         .out_of_bounds(out_of_bounds),
         
-        // Pipeline computed values (direct connection, no width conversion needed)
+        // Pipeline computed values (loaded when solid_valid=1 and no termination)
         .pipeline_next_x(next_ix),
         .pipeline_next_y(next_iy),
         .pipeline_next_z(next_iz),
@@ -235,7 +259,7 @@ module raytracer_top #(
         .hit(ray_hit),
         .timeout(ray_timeout),
         
-        // Result outputs
+        // Result outputs (valid when done=1)
         .hit_voxel_x(hit_voxel_x),
         .hit_voxel_y(hit_voxel_y),
         .hit_voxel_z(hit_voxel_z),
@@ -248,8 +272,12 @@ module raytracer_top #(
     // =========================================================================
     // Module Instantiation: voxel_raytracer_core
     // =========================================================================
-    // The core contains the full pipeline: axis_choose -> step_update ->
-    // bounds_check -> voxel_addr_map -> voxel_ram -> scene_loader_if
+    // The core contains the full 5-stage pipeline:
+    //   Stage 1: Input registers
+    //   Stage 2: axis_choose (determine which axis has minimum timer)
+    //   Stage 3: step_update (compute next position and timers)
+    //   Stage 4: bounds_check + voxel_addr_map (check bounds, compute address)
+    //   Stage 5: voxel_ram (synchronous read) + output registers
     
     voxel_raytracer_core #(
         .W(W),
@@ -260,7 +288,7 @@ module raytracer_top #(
         .clk(clk),
         .rst_n(rst_n),
         
-        // Ray step inputs (from FSM current state, direct connection)
+        // Ray step inputs (from FSM current state)
         .ix_in(current_ix),
         .iy_in(current_iy),
         .iz_in(current_iz),
@@ -273,7 +301,7 @@ module raytracer_top #(
         .inc_x_in(inc_x_q),
         .inc_y_in(inc_y_q),
         .inc_z_in(inc_z_q),
-        .step_valid_in(fsm_active),  // Pipeline valid when FSM is actively tracing
+        .step_valid_in(fsm_active),     // Valid when FSM is in RUNNING state
         
         // Scene loading interface (pass through)
         .load_mode(load_mode),
@@ -284,36 +312,74 @@ module raytracer_top #(
         .write_count(write_count),
         .load_complete(load_complete),
         
-        // Ray step outputs (back to FSM for next iteration)
-        .ix_out(next_ix),
+        // Ray step outputs (available 5 cycles after inputs)
+        .ix_out(next_ix),               // Next voxel position (after stepping)
         .iy_out(next_iy),
         .iz_out(next_iz),
-        .next_x_out(next_next_x),
+        .next_x_out(next_next_x),       // Next timer values (after stepping)
         .next_y_out(next_next_y),
         .next_z_out(next_next_z),
         .face_mask_out(face_mask),
         .primary_face_id_out(primary_face_id),
-        .out_of_bounds_out(out_of_bounds),
-        .voxel_occupied_out(voxel_occupied),
-        .step_valid_out(step_valid_out)
+        .out_of_bounds_out(out_of_bounds),      // Bounds check for NEXT position
+        .voxel_occupied_out(voxel_occupied),    // Occupancy for CURRENT position
+        .step_valid_out(step_valid_out)         // Output valid flag (5 cycles later)
     );
     
     // =========================================================================
-    // Integration Notes:
+    // Integration Notes and Timing Documentation:
     // =========================================================================
-    // 1. The FSM (step_control_fsm) manages the control flow and state transitions
-    // 2. The core (voxel_raytracer_core) is a pipelined datapath that computes
+    // 
+    // ARCHITECTURE OVERVIEW:
+    // 1. FSM (step_control_fsm) manages control flow and state transitions
+    // 2. Core (voxel_raytracer_core) is a pipelined datapath that computes
     //    next positions using axis_choose and step_update modules
-    // 3. FSM feeds current position → pipeline computes next → FSM loads results
-    // 4. This eliminates redundant computation - only one DDA implementation
-    // 5. Pipeline outputs (next_ix/iy/iz, next_next_x/y/z, face_id) are now
-    //    actively used by the FSM instead of being computed redundantly
-    // 6. The integration provides:
-    //    - Job loading via ray_job_if
-    //    - FSM control flow
-    //    - Pipelined DDA stepping (axis_choose + step_update)
-    //    - Memory access via core's voxel_ram
-    //    - Bounds checking and occupancy detection
+    // 3. Data flow: FSM feeds current position → pipeline computes next → 
+    //    FSM loads results when valid
+    // 4. Single DDA implementation (in pipeline) - no redundant computation
+    // 
+    // PIPELINE LATENCY AND TIMING:
+    // - Pipeline has 5-cycle latency from step_valid_in to step_valid_out
+    // - Stage 1: Input registers latch current position/timers
+    // - Stage 2: axis_choose determines which axis to step (combinational + reg)
+    // - Stage 3: step_update computes next position (combinational + reg)
+    // - Stage 4: bounds_check and voxel_addr_map (combinational + reg)
+    // - Stage 5: voxel_ram synchronous read + output register
+    // 
+    // TIMING EXAMPLE (FSM at position P):
+    //   Cycle 0: FSM outputs current_ix/iy/iz = P, fsm_active = 1
+    //   Cycle 1: Pipeline stage 1 latches position P
+    //   Cycle 2: Pipeline stage 2 determines stepping axis
+    //   Cycle 3: Pipeline stage 3 computes next position P+1
+    //   Cycle 4: Pipeline stage 4 checks bounds for P+1, computes RAM address for P
+    //   Cycle 5: Pipeline stage 5 reads voxel occupancy for position P
+    //   Cycle 5: step_valid_out = 1, voxel_occupied = RAM[P], next_ix/iy/iz = P+1
+    //   Cycle 5: FSM sees solid_valid=1, reads voxel_occupied and pipeline_next_*
+    //   Cycle 6: If RAM[P] empty: FSM updates to position P+1
+    //            If RAM[P] solid: FSM terminates with hit at position P
+    // 
+    // BOUNDS CHECKING TIMING:
+    // - bounds_check examines the NEXT position (P+1), not current position (P)
+    // - out_of_bounds indicates if stepping to P+1 would exceed grid bounds
+    // - This prevents invalid memory accesses before bounds violation detection
+    // - FSM terminates if out_of_bounds=1, preventing step to invalid position
+    // 
+    // WIDTH CONVERSIONS:
+    // - COORD_WIDTH (16-bit) is over-provisioned for result outputs to allow
+    //   future expansion beyond 32^3 grids
+    // - Actual voxel coordinates are X_BITS/Y_BITS/Z_BITS (5-bit = 0..31)
+    // - TIMER_WIDTH and W should match (both 32-bit in default configuration)
+    // - Zero-extension used for width conversions when parameters differ
+    //
+    // FEATURES PROVIDED:
+    // - Job loading and parameter latching via ray_job_if
+    // - FSM-controlled stepping state machine (4 states: IDLE/INIT/RUNNING/FINISH)
+    // - Pipelined DDA stepping (axis_choose + step_update)
+    // - Voxel memory access with scene loading capability
+    // - Bounds checking and occupancy detection
+    // - Hit detection with face ID capture
+    // - Timeout detection for rays that exceed max_steps
+    // - Load mode gating to prevent job acceptance during scene loading
 
 endmodule
 

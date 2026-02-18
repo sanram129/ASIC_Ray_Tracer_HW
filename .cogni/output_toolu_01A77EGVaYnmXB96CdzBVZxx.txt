@@ -1,0 +1,15 @@
+=== Command: rm Raytracing_Accelerator_new/INTEGRATION_NOTES.md (2026-02-18T19:06:42.857Z) ===
+Exit Code: 1
+Output:
+rm : Cannot find path 'C:\Users\parth\OneDrive\Desktop\Code 
+Repos\ASIC_Ray_Tracer_HW\Raytracing_Accelerator_new\INTEGRATION_NOTES.md' because it does not exist.
+At line:1 char:1
++ rm Raytracing_Accelerator_new/INTEGRATION_NOTES.md
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\parth\...RATION_NOTES.md:String) [Remove-Item], ItemNotFoundEx 
+   ception
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.RemoveItemCommand
+ 
+
+=== End Output ===
+

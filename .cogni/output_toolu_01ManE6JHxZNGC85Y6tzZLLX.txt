@@ -1,0 +1,10 @@
+=== Command: cd Raytracing_Accelerator_new; iverilog -g2012 -o tb_simple.vvp axis_choose.sv bounds_check.sv step_update.sv voxel_addr_map.sv voxel_ram.sv scene_loader_if.sv voxel_raytracer_core.sv ray_job_if.sv step_control_fsm.sv raytracer_top.sv tb_raytracer_simple.sv (2026-02-18T19:30:15.897Z) ===
+Exit Code: 1
+Output:
+tb_raytracer_simple.sv:160: sorry: Overriding the default variable lifetime is not yet supported.
+tb_raytracer_simple.sv:192: sorry: Overriding the default variable lifetime is not yet supported.
+tb_raytracer_simple.sv:337: sorry: Overriding the default variable lifetime is not yet supported.
+tb_raytracer_simple.sv:338: sorry: Overriding the default variable lifetime is not yet supported.
+
+=== End Output ===
+

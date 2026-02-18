@@ -1,0 +1,14 @@
+=== Command: python -c "import numpy, trimesh, scipy; print('✅ Python packages: numpy, trimesh, scipy - OK')" (2026-02-18T19:24:49.619Z) ===
+Exit Code: 1
+Output:
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import numpy, trimesh, scipy; print('\u2705 Python packages: numpy, trimesh, scipy - OK')
+                                  ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 0: character maps to <undefined>
+
+=== End Output ===
+

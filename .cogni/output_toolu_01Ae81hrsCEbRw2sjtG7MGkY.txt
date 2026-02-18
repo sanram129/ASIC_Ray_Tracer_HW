@@ -1,0 +1,7 @@
+=== Command: python -c "import numpy, trimesh, scipy; print('Python packages OK: numpy, trimesh, scipy')" (2026-02-18T19:24:57.077Z) ===
+Exit Code: 0
+Output:
+Python packages OK: numpy, trimesh, scipy
+
+=== End Output ===
+

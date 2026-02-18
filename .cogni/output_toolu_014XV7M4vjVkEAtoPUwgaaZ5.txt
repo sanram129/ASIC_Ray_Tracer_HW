@@ -1,0 +1,23 @@
+=== Command: cd Raytracing_Accelerator_new; iverilog -g2012 -o tb_simple.vvp axis_choose.sv bounds_check.sv step_update.sv voxel_addr_map.sv voxel_ram.sv scene_loader_if.sv voxel_raytracer_core.sv ray_job_if.sv step_control_fsm.sv raytracer_top.sv tb_raytracer_simple.sv (2026-02-18T19:38:23.070Z) ===
+Exit Code: 0
+Output:
+raytracer_top.sv:212: warning: Port 33 (hit_voxel_x) of step_control_fsm expects 5 bits, got 16.
+raytracer_top.sv:212:        : Padding 11 high bits of the expression.
+raytracer_top.sv:212: warning: Port 34 (hit_voxel_y) of step_control_fsm expects 5 bits, got 16.
+raytracer_top.sv:212:        : Padding 11 high bits of the expression.
+raytracer_top.sv:212: warning: Port 35 (hit_voxel_z) of step_control_fsm expects 5 bits, got 16.
+raytracer_top.sv:212:        : Padding 11 high bits of the expression.
+axis_choose.sv:31: sorry: constant selects in always_* processes are not currently supported (all bits will be included).
+axis_choose.sv:31: sorry: constant selects in always_* processes are not currently supported (all bits will be included).
+step_update.sv:74: sorry: constant selects in always_* processes are not currently supported (all bits will be included).
+step_update.sv:74: sorry: constant selects in always_* processes are not currently supported (all bits will be included).
+step_update.sv:74: sorry: constant selects in always_* processes are not currently supported (all bits will be included).
+step_update.sv:74: sorry: constant selects in always_* processes are not currently supported (all bits will be included).
+step_update.sv:74: sorry: constant selects in always_* processes are not currently supported (all bits will be included).
+step_update.sv:74: sorry: constant selects in always_* processes are not currently supported (all bits will be included).
+step_update.sv:102: sorry: constant selects in always_* processes are not currently supported (all bits will be included).
+step_update.sv:102: sorry: constant selects in always_* processes are not currently supported (all bits will be included).
+step_update.sv:102: sorry: constant selects in always_* processes are not currently supported (all bits will be included).
+
+=== End Output ===
+

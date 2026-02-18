@@ -1,0 +1,23 @@
+{
+  "stdout_truncated": false,
+  "stdout": "INFO: [EDA] eda: version 0.3.10\nINFO: [EDA] main: eda sim --no-color --tool verilator --seed=1 --verilate-args=-Wno-fatal --waves tb_raytracer_top; (run from /app/eda.work/ff8ca57d-1da4-471c-8307-d33553cc92f1.edacmd)\nINFO: [EDA] eda_config: --config-yml=eda_config_defaults.yml observed\nINFO: [EDA] eda_config: using config: /app/venv/lib/python3.12/site-packages/opencos/eda_config_defaults.yml\nINFO: [EDA] *** OpenCOS EDA ***\nINFO: [EDA] Detected verilator (/usr/local/bin/verilator)\nERROR: [EDA] Trying to resolve command-line target=./tb_raytracer_top: but path ./ has no DEPS markup file (DEPS.yml)\nINFO: [EDA] Wrote artifacts JSON: eda.work/artifacts.json\nINFO: [EDA] Exiting with 0 warnings, 1 errors\nINFO: [EDA] Closing logfile: eda.work/eda.log\n",
+  "stdout_size": 754,
+  "stdout_total_size": 754,
+  "message": "Simulation failed with return code 10",
+  "warnings": 0,
+  "errors": 0,
+  "stderr": "",
+  "return_code": 10,
+  "start_time": 1771442873.0125763,
+  "stop_time": 1771442873.204811,
+  "waves_returned": false,
+  "wave_file": null,
+  "wave_file_size": null,
+  "verilator_version": null,
+  "system_info": null,
+  "work_dir_files": null,
+  "frogger_status_reason": "Simulation failed with return code 10",
+  "fst_s3_key": null,
+  "fst_s3_bucket": null,
+  "error": "Simulation failed with return code 10"
+}

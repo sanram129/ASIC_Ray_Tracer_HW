@@ -1,0 +1,7 @@
+=== Command: pip --version (2026-02-18T19:10:22.849Z) ===
+Exit Code: 0
+Output:
+pip 25.0.1 from C:\Python313\Lib\site-packages\pip (python 3.13)
+
+=== End Output ===
+

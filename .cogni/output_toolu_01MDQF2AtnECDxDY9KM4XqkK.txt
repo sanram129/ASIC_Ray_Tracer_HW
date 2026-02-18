@@ -1,0 +1,14 @@
+=== Command: iverilog -V (2026-02-18T19:10:37.777Z) ===
+Exit Code: 1
+Output:
+iverilog : The term 'iverilog' is not recognized as the name of a cmdlet, function, script file, or operable program. 
+Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ iverilog -V
++ ~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (iverilog:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+
+=== End Output ===
+
