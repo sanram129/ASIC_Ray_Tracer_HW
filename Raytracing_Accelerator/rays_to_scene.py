@@ -236,6 +236,7 @@ def main() -> None:
     ap.add_argument("--wbits", type=int, default=24, help="Fixed-point width W for next/inc")
     ap.add_argument("--frac", type=int, default=16, help="Fixed-point fractional bits")
     ap.add_argument("--max_steps", type=int, default=512, help="max_steps sent to ASIC")
+    ap.add_argument("--downsample", action="store_true", help="Downsample to 16x16x16 at corner with floor and walls")
     args = ap.parse_args()
 
     out_dir = args.out_dir
@@ -246,6 +247,11 @@ def main() -> None:
     mesh_u, tf = stl_to_voxels.normalize_to_unit_cube(mesh, pad=args.pad)
     occ = stl_to_voxels.voxelize_by_center_contains(mesh_u, n=N)
 
+    # Apply downsampling with walls if requested
+    if args.downsample:
+        occ = stl_to_voxels.create_downsampled_with_walls(occ)
+        print("Applied downsampling: 16x16x16 model at corner with floor and two walls")
+
     voxels_mem = out_dir / "voxels.mem"
     voxels_load = out_dir / "voxels_load.txt"
     meta_json = out_dir / "voxel_meta.json"
@@ -254,21 +260,25 @@ def main() -> None:
     stl_to_voxels.write_voxels_load_txt(occ, voxels_load)
 
     # Bounds in world coords [0,32]^3:
-    bmin_u, bmax_u = mesh_u.bounds
-    bmin_w = bmin_u * float(N)
-    bmax_w = bmax_u * float(N)
+    # When downsampled, the model is at (3-18, 3-18, 1-16) - sitting on floor
+    if args.downsample:
+        bmin_w = np.array([3.0, 3.0, 1.0], dtype=np.float64)
+        bmax_w = np.array([19.0, 19.0, 17.0], dtype=np.float64)
+    else:
+        bmin_u, bmax_u = mesh_u.bounds
+        bmin_w = bmin_u * float(N)
+        bmax_w = bmax_u * float(N)
 
     meta = {
         "n": N,
         "bit_meaning": {"0": "empty/transparent", "1": "solid"},
         "address_mapping": "addr = (z<<10) | (y<<5) | x  (for 32^3)",
+        "downsampled": args.downsample,
         "normalize_transform": {
             "scale": float(tf.scale),
             "offset": tf.offset.tolist(),
             "in_bounds_min": tf.in_bounds_min.tolist(),
             "in_bounds_max": tf.in_bounds_max.tolist(),
-            "out_bounds_min_unit": bmin_u.tolist(),
-            "out_bounds_max_unit": bmax_u.tolist(),
             "out_bounds_min_world": bmin_w.tolist(),
             "out_bounds_max_world": bmax_w.tolist(),
         },
