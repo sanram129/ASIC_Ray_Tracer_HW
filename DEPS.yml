@@ -1,0 +1,112 @@
+# DEPS configuration for testbench simulations
+
+# ============================================================
+# Core Voxel Traversal Modules
+# ============================================================
+
+# axis_choose testbench
+sim_axis_choose:
+  deps:
+    - rtl/axis_choose.sv
+    - tb/tb_axis_choose.sv
+  top: tb_axis_choose
+
+# step_update testbench
+sim_step_update:
+  deps:
+    - rtl/step_update.sv
+    - tb/tb_step_update.sv
+  top: tb_step_update
+
+# bounds_check testbench
+sim_bounds_check:
+  deps:
+    - rtl/bounds_check.sv
+    - tb/tb_bounds_check.sv
+  top: tb_bounds_check
+
+# integration testbench (traversal modules)
+sim_integration:
+  deps:
+    - rtl/axis_choose.sv
+    - rtl/step_update.sv
+    - rtl/bounds_check.sv
+    - tb/tb_integration.sv
+  top: tb_integration
+
+# ============================================================
+# Memory Management Modules
+# ============================================================
+
+# voxel_addr_map - 3D to linear address mapping
+voxel_addr_map:
+  deps:
+    - rtl/voxel_addr_map.sv
+
+# voxel_ram - Voxel occupancy memory
+voxel_ram:
+  deps:
+    - rtl/voxel_ram.sv
+
+# scene_loader_if - Scene loading interface
+scene_loader_if:
+  deps:
+    - rtl/scene_loader_if.sv
+
+# ============================================================
+# Full System Integration
+# ============================================================
+
+# Complete voxel raytracer system (all RTL modules)
+system_all:
+  deps:
+    - rtl/axis_choose.sv
+    - rtl/step_update.sv
+    - rtl/bounds_check.sv
+    - rtl/voxel_addr_map.sv
+    - rtl/voxel_ram.sv
+    - rtl/scene_loader_if.sv
+
+# Clocked voxel raytracer core (top-level with pipeline)
+voxel_raytracer_core:
+  deps:
+    - rtl/axis_choose.sv
+    - rtl/step_update.sv
+    - rtl/bounds_check.sv
+    - rtl/voxel_addr_map.sv
+    - rtl/voxel_ram.sv
+    - rtl/scene_loader_if.sv
+    - rtl/voxel_raytracer_core.sv
+
+# Full system testbench (clocked core with all modules)
+sim_voxel_raytracer_core:
+  deps:
+    - rtl/axis_choose.sv
+    - rtl/step_update.sv
+    - rtl/bounds_check.sv
+    - rtl/voxel_addr_map.sv
+    - rtl/voxel_ram.sv
+    - rtl/scene_loader_if.sv
+    - rtl/voxel_raytracer_core.sv
+    - tb/tb_voxel_raytracer_core.sv
+  top: tb_voxel_raytracer_core
+
+# ============================================================
+# Raytracing Accelerator New (Full System with FSM)
+# ============================================================
+
+# Raytracer top testbench (complete system: FSM + core + job interface)
+sim_raytracer_top:
+  deps:
+    - Raytracing_Accelerator_new/axis_choose.sv
+    - Raytracing_Accelerator_new/bounds_check.sv
+    - Raytracing_Accelerator_new/step_update.sv
+    - Raytracing_Accelerator_new/voxel_addr_map.sv
+    - Raytracing_Accelerator_new/voxel_ram.sv
+    - Raytracing_Accelerator_new/scene_loader_if.sv
+    - Raytracing_Accelerator_new/voxel_raytracer_core.sv
+    - Raytracing_Accelerator_new/ray_job_if.sv
+    - Raytracing_Accelerator_new/step_control_fsm.sv
+    - Raytracing_Accelerator_new/raytracer_top.sv
+    - Raytracing_Accelerator_new/tb_raytracer_top.sv
+  top: tb_raytracer_top
