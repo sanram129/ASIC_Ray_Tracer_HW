@@ -79,7 +79,8 @@ def _load_light_pos() -> np.ndarray:
 
 _CAMERA_JSON = _load_camera_json()
 LIGHT_POS    = _load_light_pos()
-AMBIENT      = 0.15
+AMBIENT      = 0.20
+EXPOSURE     = 0.50   # overall brightness scale applied before gamma (< 1 = darker)
 SKY_COLOR = np.array([0.4, 0.6, 1.0], dtype=np.float32)   # background blue
 
 # =============================================================================
@@ -433,9 +434,12 @@ async def test_render_image(dut):
             log.info("  Light source is behind the camera — dot not rendered")
 
     # -------------------------------------------------------------------------
-    # 9. Convert float [0,1] → uint8 [0,255] and save PNG
+    # 9. Gamma-correct, convert float [0,1] → uint8 [0,255] and save PNG
+    #    Apply sRGB gamma (power 1/2.2) so that the linear shading values map
+    #    to perceptually correct brightness on a standard monitor.
     # -------------------------------------------------------------------------
-    img_uint8 = (image * 255.0).round().astype(np.uint8)
+    image_gamma = np.clip(image * EXPOSURE, 0.0, 1.0) ** (1.0 / 2.2)
+    img_uint8 = (image_gamma * 255.0).round().astype(np.uint8)
     pil_image = Image.fromarray(img_uint8, mode="RGB")
 
     pil_image.save(OUTPUT_PNG)

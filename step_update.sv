@@ -8,10 +8,10 @@
 module step_update #(
     parameter int W = 32  // Timer/accumulator bit width
 )(
-    // Current voxel indices (5-bit coordinates)
-    input  logic [4:0]   ix,
-    input  logic [4:0]   iy,
-    input  logic [4:0]   iz,
+    // Current voxel indices (6-bit coordinates for bounds detection)
+    input  logic [5:0]   ix,
+    input  logic [5:0]   iy,
+    input  logic [5:0]   iz,
     
     // Step direction signs: 1 => +1 step, 0 => -1 step
     input  logic         sx,
@@ -36,9 +36,9 @@ module step_update #(
     input  logic [1:0]   primary_sel,
     
     // Updated voxel indices
-    output logic [4:0]   ix_next,
-    output logic [4:0]   iy_next,
-    output logic [4:0]   iz_next,
+    output logic [5:0]   ix_next,
+    output logic [5:0]   iy_next,
+    output logic [5:0]   iz_next,
     
     // Updated timer values
     output logic [W-1:0] next_x_next,
@@ -54,41 +54,42 @@ module step_update #(
     // Step Direction Computation
     // =========================================================================
     // Convert sign bits to signed step values: sx==1 means +1, sx==0 means -1
-    // Using 6-bit signed to avoid overflow, then truncate to 5-bit output
+    // Using 7-bit signed to handle 6-bit unsigned coordinate arithmetic
     
-    logic signed [5:0] step_x, step_y, step_z;
+    logic signed [6:0] step_x, step_y, step_z;
     
     always_comb begin
         // Compute ±1 step values based on sign bits
-        step_x = sx ? 6'sd1 : -6'sd1;
-        step_y = sy ? 6'sd1 : -6'sd1;
-        step_z = sz ? 6'sd1 : -6'sd1;
+        step_x = sx ? 7'sd1 : -7'sd1;
+        step_y = sy ? 7'sd1 : -7'sd1;
+        step_z = sz ? 7'sd1 : -7'sd1;
     end
     
     // =========================================================================
-    // Voxel Index Updates (5-bit coordinates with wrap-around)
+    // Voxel Index Updates (6-bit coordinates for out-of-bounds detection)
     // =========================================================================
     // Update each axis only if corresponding step_mask bit is set
+    // 6-bit allows: 31+1=32 (OOB) and 0-1=63 (OOB) to be detected
     // Otherwise pass through unchanged (reduces power)
     
     always_comb begin
         // X-axis: Update if step_mask[0] == 1
         if (step_mask[0]) begin
-            ix_next = ix + step_x[4:0];  // Truncate to 5-bit, wrap behavior OK
+            ix_next = ix + step_x[5:0];  // 6-bit arithmetic, no wrapping
         end else begin
             ix_next = ix;  // Pass through unchanged
         end
         
         // Y-axis: Update if step_mask[1] == 1
         if (step_mask[1]) begin
-            iy_next = iy + step_y[4:0];
+            iy_next = iy + step_y[5:0];  // 6-bit arithmetic, no wrapping
         end else begin
             iy_next = iy;
         end
         
         // Z-axis: Update if step_mask[2] == 1
         if (step_mask[2]) begin
-            iz_next = iz + step_z[4:0];
+            iz_next = iz + step_z[5:0];  // 6-bit arithmetic, no wrapping
         end else begin
             iz_next = iz;
         end

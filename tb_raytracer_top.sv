@@ -17,9 +17,9 @@ module tb_raytracer_top;
     localparam int W = 32;
     localparam int MAX_VAL = 31;
     localparam int ADDR_BITS = 15;
-    localparam int X_BITS = 5;
-    localparam int Y_BITS = 5;
-    localparam int Z_BITS = 5;
+    localparam int X_BITS = 6;  // Updated to 6-bit for bounds detection
+    localparam int Y_BITS = 6;
+    localparam int Z_BITS = 6;
     localparam int MAX_STEPS_BITS = 10;
     localparam int STEP_COUNT_WIDTH = 16;
     
@@ -204,7 +204,7 @@ module tb_raytracer_top;
     );
         // Update X
         if (step_mask[0]) begin
-            next_ix = sx ? (ix + 5'd1) : (ix - 5'd1);
+            next_ix = sx ? (ix + 6'd1) : (ix - 6'd1);
             next_nx = nx + incx;
         end else begin
             next_ix = ix;
@@ -213,7 +213,7 @@ module tb_raytracer_top;
         
         // Update Y
         if (step_mask[1]) begin
-            next_iy = sy ? (iy + 5'd1) : (iy - 5'd1);
+            next_iy = sy ? (iy + 6'd1) : (iy - 6'd1);
             next_ny = ny + incy;
         end else begin
             next_iy = iy;
@@ -222,7 +222,7 @@ module tb_raytracer_top;
         
         // Update Z
         if (step_mask[2]) begin
-            next_iz = sz ? (iz + 5'd1) : (iz - 5'd1);
+            next_iz = sz ? (iz + 6'd1) : (iz - 6'd1);
             next_nz = nz + incz;
         end else begin
             next_iz = iz;
@@ -242,17 +242,19 @@ module tb_raytracer_top;
     function automatic logic [ADDR_BITS-1:0] ref_address(
         input logic [X_BITS-1:0] x, y, z
     );
-        return {z, y, x};  // addr = (z<<10) | (y<<5) | x
+        // Mask to lower 5 bits for 32x32x32 grid (addresses 0-31 only)
+        return {z[4:0], y[4:0], x[4:0]};  // addr = (z<<10) | (y<<5) | x
     endfunction
     
     // Check if out of bounds
     function automatic logic ref_out_of_bounds(
         input logic [X_BITS-1:0] x, y, z
     );
+        // Coordinates are already 6-bit, use directly
         logic [5:0] ext_x, ext_y, ext_z;
-        ext_x = {1'b0, x};
-        ext_y = {1'b0, y};
-        ext_z = {1'b0, z};
+        ext_x = x;
+        ext_y = y;
+        ext_z = z;
         return (ext_x > MAX_VAL) || (ext_y > MAX_VAL) || (ext_z > MAX_VAL);
     endfunction
     
@@ -382,9 +384,9 @@ module tb_raytracer_top;
                     0: scene_mem[i] = 1'b0;  // Empty
                     1: scene_mem[i] = ($urandom_range(1000) < density*1000) ? 1'b1 : 1'b0;  // Random sparse
                     2: begin  // Specific landmarks
-                        if (i == ref_address(5'd10, 5'd10, 5'd10)) scene_mem[i] = 1'b1;
-                        else if (i == ref_address(5'd20, 5'd15, 5'd25)) scene_mem[i] = 1'b1;
-                        else if (i == ref_address(5'd5, 5'd5, 5'd5)) scene_mem[i] = 1'b1;
+                        if (i == ref_address(6'd10, 6'd10, 6'd10)) scene_mem[i] = 1'b1;
+                        else if (i == ref_address(6'd20, 6'd15, 6'd25)) scene_mem[i] = 1'b1;
+                        else if (i == ref_address(6'd5, 6'd5, 6'd5)) scene_mem[i] = 1'b1;
                         else scene_mem[i] = 1'b0;
                     end
                     3: begin  // Starting voxel solid
@@ -643,7 +645,7 @@ module tb_raytracer_top;
         
         // Initialize scene to empty, then mark start voxel solid
         for (int i = 0; i < MEM_SIZE; i++) scene_mem[i] = 1'b0;
-        scene_mem[ref_address(5'd10, 5'd10, 5'd10)] = 1'b1;
+        scene_mem[ref_address(6'd10, 6'd10, 6'd10)] = 1'b1;
         load_scene("Hit on first voxel", -1);  // -1 = use existing scene_mem
         
         send_job(5'd10, 5'd10, 5'd10, 1'b1, 1'b1, 1'b1,
@@ -772,7 +774,7 @@ module tb_raytracer_top;
         
         // Initialize scene to empty, then mark solid voxel 3 steps away
         for (int i = 0; i < MEM_SIZE; i++) scene_mem[i] = 1'b0;
-        scene_mem[ref_address(5'd13, 5'd10, 5'd10)] = 1'b1;
+        scene_mem[ref_address(6'd13, 6'd10, 6'd10)] = 1'b1;
         load_scene("Hit solid 3 steps away", -1);  // -1 = use existing scene_mem
         
         send_job(5'd10, 5'd10, 5'd10, 1'b1, 1'b1, 1'b1,

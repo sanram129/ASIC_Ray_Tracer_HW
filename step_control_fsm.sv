@@ -213,9 +213,10 @@ module step_control_fsm #(
                         // Check termination conditions
                         if (solid_bit) begin
                             hit_flag  <= 1'b1;
-                            hit_x_reg <= voxel_x_reg;
+                            hit_x_reg <= voxel_x_reg;  // Hit at CURRENT position
                             hit_y_reg <= voxel_y_reg;
                             hit_z_reg <= voxel_z_reg;
+                            face_reg  <= pipeline_face_id;  // CRITICAL: Latch face_id on hit!
                         end
                         
                         if (step_counter >= max_steps_reg) begin

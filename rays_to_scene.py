@@ -43,7 +43,7 @@ EPS_ADVANCE = 1e-6
 # ([0,32]^3). This is written into camera_light.json and read by test_raytracer.py
 # so you only need to change it here.
 # =============================================================================
-LIGHT_POS = np.array([16.0, 60.0, 16.0], dtype=np.float64)  # above scene center
+LIGHT_POS = np.array([50.0, 50.0, 50.0], dtype=np.float64)  # front-right-above (matches corner camera)
 
 # =============================================================================
 # CAMERA OVERRIDE — set CAM_POS to an [X, Y, Z] array to fix the camera at
@@ -276,6 +276,36 @@ def main() -> None:
     stl_to_voxels.write_voxels_mem(occ, voxels_mem)
     stl_to_voxels.write_voxels_load_txt(occ, voxels_load)
 
+    # Generate voxels_color.mem for this STL (must be regenerated on every run)
+    _, colors = stl_to_voxels.voxelize_mesh_with_colors(mesh_u, resolution=N)
+
+    # Boundary color overrides (RGB565):
+    #   Floor     (y<=1)   → muted green
+    #   Right wall (x<=1)  → muted red
+    #   Left wall  (z<=1)  → muted blue
+    # Interior / non-edge voxels keep their original color.
+    FLOOR_COLOR      = stl_to_voxels.rgb888_to_rgb565( 80, 160,  80)  # muted green
+    RIGHT_WALL_COLOR = stl_to_voxels.rgb888_to_rgb565(180,  80,  80)  # muted red
+    LEFT_WALL_COLOR  = stl_to_voxels.rgb888_to_rgb565( 80,  80, 180)  # muted blue
+
+    color_file = out_dir / "voxels_color.mem"
+    with open(str(color_file), 'w') as cf:
+        for z in range(N):
+            for y in range(N):
+                for x in range(N):
+                    if occ[x, y, z]:
+                        if y <= 1:
+                            pixel_color = FLOOR_COLOR
+                        elif x <= 1:
+                            pixel_color = RIGHT_WALL_COLOR
+                        elif z <= 1:
+                            pixel_color = LEFT_WALL_COLOR
+                        else:
+                            pixel_color = int(colors[x, y, z])
+                    else:
+                        pixel_color = int(colors[x, y, z])
+                    cf.write(f"{pixel_color:04x}\n")
+
     # Bounds in world coords [0,32]^3:
     # When downsampled, the model is at (3-18, 3-18, 1-16) - sitting on floor
     if args.downsample:
@@ -343,6 +373,7 @@ def main() -> None:
                 f.write(f"{px} {py} {valid} {ix0} {iy0} {iz0} {sx} {sy} {sz} {nx} {ny} {nz} {ix} {iy} {iz} {ms}\n")
 
     print(f"[OK] Wrote scene: {voxels_mem} (for scene_loader_if -> voxel_ram)")
+    print(f"[OK] Wrote colors: {color_file} (voxels_color.mem)")
     print(f"[OK] Wrote jobs : {jobs_path} (for ray_job_if)")
     print(f"[OK] Wrote cam/light: {out_dir / 'camera_light.json'}")
 
