@@ -79,8 +79,9 @@ def _load_light_pos() -> np.ndarray:
 
 _CAMERA_JSON = _load_camera_json()
 LIGHT_POS    = _load_light_pos()
-AMBIENT      = 0.20
-EXPOSURE     = 0.50   # overall brightness scale applied before gamma (< 1 = darker)
+AMBIENT      = 0.12
+EXPOSURE     = 0.60   # overall brightness scale applied before gamma (< 1 = darker)
+CONTRAST     = 1.10   # mild linear contrast applied before gamma (>1 increases contrast)
 SKY_COLOR = np.array([0.4, 0.6, 1.0], dtype=np.float32)   # background blue
 
 # =============================================================================
@@ -112,6 +113,101 @@ def _normalize(v: np.ndarray) -> np.ndarray:
     """Return unit vector; returns v unchanged if near-zero length."""
     n = float(np.linalg.norm(v))
     return v / n if n > 1e-12 else v
+
+
+def _ray_origin_dir_for_pixel(px: int, py: int, cam_data: dict, img_w: int, img_h: int) -> tuple[np.ndarray, np.ndarray]:
+    """Reconstruct the primary ray for (px,py) using camera_light.json.
+
+    This matches rays_to_scene.generate_primary_ray():
+      u,v in NDC -> scale by tan(fov/2) and aspect -> dir = normalize(fwd + u*right + v*up)
+    """
+    cam = cam_data.get("camera") if cam_data else None
+    if not cam:
+        raise KeyError("camera_light.json missing 'camera' block")
+
+    cp = np.array(cam["pos"], dtype=np.float64)
+    fwd = np.array(cam["forward"], dtype=np.float64)
+    rt = np.array(cam["right"], dtype=np.float64)
+    up = np.array(cam["up"], dtype=np.float64)
+    fov = float(cam["fov_deg"])
+
+    aspect = float(img_w) / float(img_h)
+    tan_half = math.tan(math.radians(fov * 0.5))
+
+    u = ((float(px) + 0.5) / float(img_w)) * 2.0 - 1.0
+    v = 1.0 - ((float(py) + 0.5) / float(img_h)) * 2.0
+    u *= aspect * tan_half
+    v *= tan_half
+
+    direction = _normalize(fwd + u * rt + v * up)
+    return cp.astype(np.float32), direction.astype(np.float32)
+
+
+def _hit_pos_on_voxel_face(
+    voxel_x: int,
+    voxel_y: int,
+    voxel_z: int,
+    outward_normal: np.ndarray,
+    ray_origin: np.ndarray,
+    ray_dir: np.ndarray,
+) -> np.ndarray:
+    """Compute a sub-voxel hit point on the reported hit voxel face.
+
+    We intersect the camera ray with the plane of the hit face (chosen by the
+    outward normal) and clamp to that face's bounds for numerical robustness.
+    """
+    nx, ny, nz = float(outward_normal[0]), float(outward_normal[1]), float(outward_normal[2])
+
+    # Determine primary axis (FACE_NORMALS are axis-aligned).
+    ax = 0
+    if abs(ny) > abs(nx):
+        ax = 1
+    if abs(nz) > max(abs(nx), abs(ny)):
+        ax = 2
+
+    x0, x1 = float(voxel_x), float(voxel_x + 1)
+    y0, y1 = float(voxel_y), float(voxel_y + 1)
+    z0, z1 = float(voxel_z), float(voxel_z + 1)
+
+    if ax == 0:
+        plane = x0 if nx < 0.0 else x1
+        denom = float(ray_dir[0])
+        if abs(denom) < 1e-12:
+            return np.array([voxel_x + 0.5, voxel_y + 0.5, voxel_z + 0.5], dtype=np.float32)
+        t = (plane - float(ray_origin[0])) / denom
+    elif ax == 1:
+        plane = y0 if ny < 0.0 else y1
+        denom = float(ray_dir[1])
+        if abs(denom) < 1e-12:
+            return np.array([voxel_x + 0.5, voxel_y + 0.5, voxel_z + 0.5], dtype=np.float32)
+        t = (plane - float(ray_origin[1])) / denom
+    else:
+        plane = z0 if nz < 0.0 else z1
+        denom = float(ray_dir[2])
+        if abs(denom) < 1e-12:
+            return np.array([voxel_x + 0.5, voxel_y + 0.5, voxel_z + 0.5], dtype=np.float32)
+        t = (plane - float(ray_origin[2])) / denom
+
+    if not np.isfinite(t) or t <= 0.0:
+        return np.array([voxel_x + 0.5, voxel_y + 0.5, voxel_z + 0.5], dtype=np.float32)
+
+    p = ray_origin.astype(np.float64) + ray_dir.astype(np.float64) * float(t)
+
+    # Clamp to the hit face bounds (helps with tiny floating error).
+    if ax == 0:
+        p[0] = float(plane)
+        p[1] = min(max(p[1], y0), y1)
+        p[2] = min(max(p[2], z0), z1)
+    elif ax == 1:
+        p[1] = float(plane)
+        p[0] = min(max(p[0], x0), x1)
+        p[2] = min(max(p[2], z0), z1)
+    else:
+        p[2] = float(plane)
+        p[0] = min(max(p[0], x0), x1)
+        p[1] = min(max(p[1], y0), y1)
+
+    return p.astype(np.float32)
 
 
 def _project_to_pixel(world_pos: np.ndarray, cam_data: dict, img_w: int, img_h: int):
@@ -393,8 +489,17 @@ async def test_render_image(dut):
 
             # ── Lambertian diffuse shading ────────────────────────────────────
             # diffuse = max(0, dot(surface_normal, direction_to_light))
-            hit_pos   = np.array([x, y, z], dtype=np.float32)
             normal    = FACE_NORMALS[fid]
+
+            # Use a continuous hit point on the voxel face plane for point-light shading.
+            # This avoids the “1-voxel step” brightness banding you get when using
+            # integer voxel indices as the lighting point.
+            if _CAMERA_JSON:
+                ray_o, ray_d = _ray_origin_dir_for_pixel(job["px"], job["py"], _CAMERA_JSON, img_w, img_h)
+                hit_pos = _hit_pos_on_voxel_face(x, y, z, normal, ray_o, ray_d)
+            else:
+                hit_pos = np.array([x + 0.5, y + 0.5, z + 0.5], dtype=np.float32)
+
             light_dir = _normalize(LIGHT_POS - hit_pos)
             diffuse   = float(np.dot(normal, light_dir))
             diffuse   = max(0.0, diffuse)
@@ -438,7 +543,9 @@ async def test_render_image(dut):
     #    Apply sRGB gamma (power 1/2.2) so that the linear shading values map
     #    to perceptually correct brightness on a standard monitor.
     # -------------------------------------------------------------------------
-    image_gamma = np.clip(image * EXPOSURE, 0.0, 1.0) ** (1.0 / 2.2)
+    image_lin = np.clip(image * EXPOSURE, 0.0, 1.0)
+    image_lin = np.clip((image_lin - 0.5) * CONTRAST + 0.5, 0.0, 1.0)
+    image_gamma = image_lin ** (1.0 / 2.2)
     img_uint8 = (image_gamma * 255.0).round().astype(np.uint8)
     pil_image = Image.fromarray(img_uint8, mode="RGB")
 

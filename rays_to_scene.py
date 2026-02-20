@@ -39,11 +39,13 @@ EPS_DIR = 1e-12
 EPS_ADVANCE = 1e-6
 
 # =============================================================================
-# LIGHT POSITION — edit this to move the light. Units are voxel-world coords
-# ([0,32]^3). This is written into camera_light.json and read by test_raytracer.py
-# so you only need to change it here.
+# LIGHT POSITION — edit this to move the light. Units are voxel-world coords.
+# This is written into camera_light.json and read by test_raytracer.py.
+#
+# NOTE: Keep the light reasonably close to the 32^3 world to get visible
+# gradients (a too-distant light becomes almost directional and looks flatter).
 # =============================================================================
-LIGHT_POS = np.array([50.0, 50.0, 50.0], dtype=np.float64)  # front-right-above (matches corner camera)
+LIGHT_POS = np.array([40.0, 28.0, 10.0], dtype=np.float64)  # side/overhead, not near the corner camera
 
 # =============================================================================
 # CAMERA OVERRIDE — set CAM_POS to an [X, Y, Z] array to fix the camera at
@@ -147,7 +149,8 @@ def to_fixed(x: float, wbits: int, frac: int) -> int:
     max_u = (1 << wbits) - 1
     if not np.isfinite(x) or x < 0.0:
         return max_u
-    val = int(round(x * (1 << frac)))
+    # Truncate (do NOT round) to reduce fixed-point ties between axes.
+    val = int(x * (1 << frac))
     if val < 0:
         val = 0
     if val > max_u:
