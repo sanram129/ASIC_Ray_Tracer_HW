@@ -1,0 +1,80 @@
+# DEPS Configuration for Raytracing Accelerator
+# Usage: Specify which modules to compile/simulate
+
+# Individual module files
+axis_choose_mod:
+  deps:
+    - axis_choose.sv
+
+bounds_check_mod:
+  deps:
+    - bounds_check.sv
+
+step_update_mod:
+  deps:
+    - step_update.sv
+
+voxel_addr_map_mod:
+  deps:
+    - voxel_addr_map.sv
+
+voxel_ram_mod:
+  deps:
+    - voxel_ram.sv
+
+scene_loader_mod:
+  deps:
+    - scene_loader_if.sv
+
+# Job interface
+ray_job_if_mod:
+  deps:
+    - ray_job_if.sv
+
+# FSM
+step_fsm_mod:
+  deps:
+    - step_control_fsm.sv
+
+# Raytracer core pipeline
+raytracer_core:
+  deps:
+    - axis_choose.sv
+    - bounds_check.sv
+    - step_update.sv
+    - voxel_addr_map.sv
+    - voxel_ram.sv
+    - scene_loader_if.sv
+    - voxel_raytracer_core.sv
+  top: voxel_raytracer_core
+
+# Top-level raytracer
+raytracer_top_mod:
+  deps:
+    - axis_choose.sv
+    - bounds_check.sv
+    - step_update.sv
+    - voxel_addr_map.sv
+    - voxel_ram.sv
+    - scene_loader_if.sv
+    - voxel_raytracer_core.sv
+    - ray_job_if.sv
+    - step_control_fsm.sv
+    - raytracer_top.sv
+  top: raytracer_top
+
+# Comprehensive testbench for full system
+tb_raytracer_top:
+  deps:
+    - axis_choose.sv
+    - bounds_check.sv
+    - step_update.sv
+    - voxel_addr_map.sv
+    - voxel_ram.sv
+    - scene_loader_if.sv
+    - voxel_raytracer_core.sv
+    - ray_job_if.sv
+    - step_control_fsm.sv
+    - raytracer_top.sv
+    - tb_raytracer_top.sv
+  top: tb_raytracer_top
