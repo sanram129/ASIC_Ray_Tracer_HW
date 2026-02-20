@@ -85,6 +85,27 @@ CONTRAST     = 1.10   # mild linear contrast applied before gamma (>1 increases 
 SKY_COLOR = np.array([0.4, 0.6, 1.0], dtype=np.float32)   # background blue
 
 # =============================================================================
+# Shadows
+# =============================================================================
+# Hard shadows via secondary ray toward the point light.
+# We reuse the ASIC DDA core as an occlusion tester.
+ENABLE_SHADOWS = True
+SHADOW_BIAS = 1e-3      # world-units bias along surface normal to avoid self-hit
+SHADOW_EPS_T = 1e-4     # small reduction from light distance to avoid boundary tie
+
+# Fixed-point settings used by ray job encoding (must match rays_to_scene.py output)
+_FIXED = (_CAMERA_JSON.get("fixed_point", {}) if _CAMERA_JSON else {})
+FIXED_W = int(_FIXED.get("W", 24))
+FIXED_FRAC = int(_FIXED.get("FRAC", 16))
+
+# Ray job world bounds (32^3 voxel world)
+N = 32
+WORLD_MIN = np.array([0.0, 0.0, 0.0], dtype=np.float64)
+WORLD_MAX = np.array([float(N), float(N), float(N)], dtype=np.float64)
+EPS_DIR = 1e-12
+EPS_ADVANCE = 1e-6
+
+# =============================================================================
 # Face normals table
 # primary_face_id from step_update.sv encodes the LAST DDA STEP DIRECTION
 # (the axis the ray was travelling when it entered the voxel), NOT the outward
@@ -113,6 +134,183 @@ def _normalize(v: np.ndarray) -> np.ndarray:
     """Return unit vector; returns v unchanged if near-zero length."""
     n = float(np.linalg.norm(v))
     return v / n if n > 1e-12 else v
+
+
+def _to_fixed_nonneg(x: float, wbits: int, frac: int) -> int:
+    """Convert non-negative float to unsigned fixed-point, truncating.
+
+    Matches rays_to_scene.to_fixed(): saturates to max on NaN/inf/negative.
+    """
+    max_u = (1 << int(wbits)) - 1
+    if (not math.isfinite(x)) or x < 0.0:
+        return max_u
+    val = int(x * (1 << int(frac)))
+    if val < 0:
+        return 0
+    if val > max_u:
+        return max_u
+    return val
+
+
+def _intersect_aabb(origin: np.ndarray, direction: np.ndarray, bmin: np.ndarray, bmax: np.ndarray) -> tuple[bool, float, float]:
+    """Ray-AABB intersection (slab method). Returns (hit, t_enter, t_exit)."""
+    tmin = -float("inf")
+    tmax = +float("inf")
+    for i in range(3):
+        d = float(direction[i])
+        o = float(origin[i])
+        if abs(d) < EPS_DIR:
+            if o < float(bmin[i]) or o > float(bmax[i]):
+                return False, 0.0, 0.0
+            continue
+        inv = 1.0 / d
+        t0 = (float(bmin[i]) - o) * inv
+        t1 = (float(bmax[i]) - o) * inv
+        if t0 > t1:
+            t0, t1 = t1, t0
+        tmin = max(tmin, t0)
+        tmax = min(tmax, t1)
+        if tmax < tmin:
+            return False, 0.0, 0.0
+    return True, float(tmin), float(tmax)
+
+
+def _make_option_b_job(
+    origin: np.ndarray,
+    direction: np.ndarray,
+    wbits: int,
+    frac: int,
+    max_steps: int,
+) -> dict:
+    """Build an Option-B ray job dict compatible with _send_ray_job().
+
+    Returns a dict with keys used by the DUT job interface plus a `valid` flag.
+    """
+    hit, t_enter, t_exit = _intersect_aabb(origin, direction, WORLD_MIN, WORLD_MAX)
+    if (not hit) or (t_exit < 0.0):
+        return {"valid": 0}
+
+    t0 = max(t_enter, 0.0) + EPS_ADVANCE
+    p0 = origin + direction * t0
+    # Clamp to just inside [0,32)
+    p0 = np.minimum(np.maximum(p0, 0.0), float(N) - 1e-9)
+
+    ix0 = int(np.floor(float(p0[0])))
+    iy0 = int(np.floor(float(p0[1])))
+    iz0 = int(np.floor(float(p0[2])))
+
+    sx = 1 if float(direction[0]) >= 0.0 else 0
+    sy = 1 if float(direction[1]) >= 0.0 else 0
+    sz = 1 if float(direction[2]) >= 0.0 else 0
+
+    step_x = +1 if sx == 1 else -1
+    step_y = +1 if sy == 1 else -1
+    step_z = +1 if sz == 1 else -1
+
+    next_bx = (ix0 + 1) if step_x == 1 else ix0
+    next_by = (iy0 + 1) if step_y == 1 else iy0
+    next_bz = (iz0 + 1) if step_z == 1 else iz0
+
+    def axis_t(dcomp: float, pcomp: float, next_b: int) -> tuple[float, float]:
+        if abs(dcomp) < EPS_DIR:
+            return (float("inf"), float("inf"))
+        tmax = (float(next_b) - pcomp) / dcomp
+        if tmax < 0.0:
+            tmax = 0.0
+        tdelta = abs(1.0 / dcomp)
+        return (float(tmax), float(tdelta))
+
+    tmax_x, tdelta_x = axis_t(float(direction[0]), float(p0[0]), next_bx)
+    tmax_y, tdelta_y = axis_t(float(direction[1]), float(p0[1]), next_by)
+    tmax_z, tdelta_z = axis_t(float(direction[2]), float(p0[2]), next_bz)
+
+    next_x = _to_fixed_nonneg(tmax_x, wbits, frac)
+    next_y = _to_fixed_nonneg(tmax_y, wbits, frac)
+    next_z = _to_fixed_nonneg(tmax_z, wbits, frac)
+    inc_x  = _to_fixed_nonneg(tdelta_x, wbits, frac)
+    inc_y  = _to_fixed_nonneg(tdelta_y, wbits, frac)
+    inc_z  = _to_fixed_nonneg(tdelta_z, wbits, frac)
+
+    max_steps_u = int(max(0, min(int(max_steps), 1023)))
+
+    return {
+        "valid": 1,
+        "ix0": ix0,
+        "iy0": iy0,
+        "iz0": iz0,
+        "sx": sx,
+        "sy": sy,
+        "sz": sz,
+        "next_x": next_x,
+        "next_y": next_y,
+        "next_z": next_z,
+        "inc_x": inc_x,
+        "inc_y": inc_y,
+        "inc_z": inc_z,
+        "max_steps": max_steps_u,
+    }
+
+
+def _shadow_step_budget(job: dict, t_end_fx: int) -> int:
+    """Compute max_steps so the ASIC won't march past the point light.
+
+    We simulate the same axis selection policy as axis_choose.sv:
+      pick min(next_x,next_y,next_z), with tie-break X then Y then Z.
+    Terminate when min(next_*) > t_end_fx.
+    """
+    if not job.get("valid", 0):
+        return 0
+
+    ix = int(job["ix0"])
+    iy = int(job["iy0"])
+    iz = int(job["iz0"])
+    sx = int(job["sx"])
+    sy = int(job["sy"])
+    sz = int(job["sz"])
+
+    next_x = int(job["next_x"])
+    next_y = int(job["next_y"])
+    next_z = int(job["next_z"])
+    inc_x  = int(job["inc_x"])
+    inc_y  = int(job["inc_y"])
+    inc_z  = int(job["inc_z"])
+
+    step_x = 1 if sx == 1 else -1
+    step_y = 1 if sy == 1 else -1
+    step_z = 1 if sz == 1 else -1
+
+    steps = 0
+    # Upper bound: never need more than a few hundred for a 32^3 world, but cap defensively.
+    for _ in range(2048):
+        m = next_x
+        if next_y < m:
+            m = next_y
+        if next_z < m:
+            m = next_z
+        if m > int(t_end_fx):
+            break
+
+        # Deterministic tie-break matches axis_choose.sv
+        if next_x <= next_y and next_x <= next_z:
+            ix += step_x
+            next_x += inc_x
+        elif next_y <= next_z:
+            iy += step_y
+            next_y += inc_y
+        else:
+            iz += step_z
+            next_z += inc_z
+
+        steps += 1
+
+        # If we leave the world bounds, ASIC will terminate on out_of_bounds anyway.
+        if ix < 0 or ix > 31 or iy < 0 or iy > 31 or iz < 0 or iz > 31:
+            break
+
+        if steps >= 1023:
+            break
+
+    return int(steps)
 
 
 def _ray_origin_dir_for_pixel(px: int, py: int, cam_data: dict, img_w: int, img_h: int) -> tuple[np.ndarray, np.ndarray]:
@@ -295,6 +493,7 @@ def _parse_ray_jobs(path: str, skip_invalid: bool = True) -> list:
                 jobs.append({
                     "px":     px,
                     "py":     py,
+                    "valid":  valid,
                     "ix0":    int(parts[3]),
                     "iy0":    int(parts[4]),
                     "iz0":    int(parts[5]),
@@ -438,13 +637,23 @@ async def test_render_image(dut):
     # -------------------------------------------------------------------------
     # 5. Parse ray jobs
     # -------------------------------------------------------------------------
-    jobs = _parse_ray_jobs(RAY_FILE)
+    # Parse ALL pixels including valid=0 rays so the output resolution matches
+    # the requested image size; invalid rays become sky pixels.
+    jobs = _parse_ray_jobs(RAY_FILE, skip_invalid=False)
     if not jobs:
         log.error(f"No valid ray jobs found in {RAY_FILE}")
         assert False, "No ray jobs to process"
 
-    img_w = max(j["px"] for j in jobs) + 1
-    img_h = max(j["py"] for j in jobs) + 1
+    # Determine intended image resolution. Prefer camera_light.json (authoritative).
+    if _CAMERA_JSON and _CAMERA_JSON.get("camera"):
+        img_w = int(_CAMERA_JSON["camera"].get("image_w", 0))
+        img_h = int(_CAMERA_JSON["camera"].get("image_h", 0))
+    else:
+        img_w = 0
+        img_h = 0
+    if img_w <= 0 or img_h <= 0:
+        img_w = max(j["px"] for j in jobs) + 1
+        img_h = max(j["py"] for j in jobs) + 1
     log.info(
         f"Rendering {img_w}x{img_h} image — {len(jobs)} rays to trace"
     )
@@ -461,6 +670,13 @@ async def test_render_image(dut):
     miss_count = 0
 
     for idx, job in enumerate(jobs):
+
+        # valid=0 means the primary ray never intersects the voxel world AABB.
+        # Leave pixel as sky and do not submit a job to hardware.
+        if not job.get("valid", 1):
+            image[job["py"], job["px"]] = SKY_COLOR
+            miss_count += 1
+            continue
 
         ok = await _send_ray_job(dut, job)
         if not ok:
@@ -504,8 +720,52 @@ async def test_render_image(dut):
             diffuse   = float(np.dot(normal, light_dir))
             diffuse   = max(0.0, diffuse)
 
-            # Energy-conserving: diffuse scales from AMBIENT up to 1.0 (never clips)
-            brightness = AMBIENT + (1.0 - AMBIENT) * diffuse
+            # ── Hard shadows (secondary ray to point light) ───────────────────
+            shadowed = False
+            if ENABLE_SHADOWS and diffuse > 1e-6:
+                # Shadow ray: start slightly outside the surface to avoid self-hit
+                hit_pos64 = hit_pos.astype(np.float64)
+                normal64 = normal.astype(np.float64)
+                light64 = LIGHT_POS.astype(np.float64)
+
+                to_light = light64 - hit_pos64
+                dist = float(np.linalg.norm(to_light))
+                if dist > 1e-6:
+                    shadow_dir = _normalize(to_light.astype(np.float64))
+                    shadow_origin = hit_pos64 + normal64 * float(SHADOW_BIAS)
+
+                    sjob = _make_option_b_job(
+                        shadow_origin,
+                        shadow_dir,
+                        wbits=FIXED_W,
+                        frac=FIXED_FRAC,
+                        max_steps=512,
+                    )
+
+                    if sjob.get("valid", 0):
+                        # Convert light distance to fixed-point and compute a step budget.
+                        t_end = max(0.0, dist - float(SHADOW_EPS_T))
+                        t_end_fx = _to_fixed_nonneg(t_end, FIXED_W, FIXED_FRAC)
+                        sjob["max_steps"] = _shadow_step_budget(sjob, t_end_fx)
+
+                        # Provide px/py for helpful error messages.
+                        sjob["px"] = job["px"]
+                        sjob["py"] = job["py"]
+
+                        ok_shadow = await _send_ray_job(dut, sjob, timeout_cycles=4000)
+                        if ok_shadow and dut.ray_hit.value:
+                            sxh = int(dut.hit_voxel_x.value)
+                            syh = int(dut.hit_voxel_y.value)
+                            szh = int(dut.hit_voxel_z.value)
+                            # Ignore pathological self-hit if it happens.
+                            shadowed = not (sxh == x and syh == y and szh == z)
+
+            # Energy-conserving diffuse with shadowing
+            if shadowed:
+                brightness = AMBIENT
+            else:
+                brightness = AMBIENT + (1.0 - AMBIENT) * diffuse
+
             pixel = base_color * brightness
             image[job["py"], job["px"]] = pixel
             hit_count += 1

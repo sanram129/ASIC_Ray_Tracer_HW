@@ -1,0 +1,8 @@
+# Python deps for ASIC_Ray_Tracer_Shadows
+# Install with: .\venv\Scripts\python.exe -m pip install -r requirements.txt
+
+cocotb
+numpy
+pillow
+trimesh
+scipy

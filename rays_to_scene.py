@@ -45,7 +45,7 @@ EPS_ADVANCE = 1e-6
 # NOTE: Keep the light reasonably close to the 32^3 world to get visible
 # gradients (a too-distant light becomes almost directional and looks flatter).
 # =============================================================================
-LIGHT_POS = np.array([40.0, 28.0, 10.0], dtype=np.float64)  # side/overhead, not near the corner camera
+LIGHT_POS = np.array([10.0, 40.0, 30.0], dtype=np.float64)  # requested: X=10, Y=40, Z=30
 
 # =============================================================================
 # CAMERA OVERRIDE — set CAM_POS to an [X, Y, Z] array to fix the camera at

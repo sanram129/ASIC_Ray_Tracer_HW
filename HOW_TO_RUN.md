@@ -2,9 +2,9 @@
 
 ## Prerequisites
 
-- **Icarus Verilog 12** installed at `C:\iverilog\bin` (must be on PATH)
+- **Icarus Verilog 12** on your `PATH` (`iverilog -V` should work)
 - **Python 3.13** installed
-- Virtual environment at `.\venv\` with all packages installed (see setup below)
+- A virtual environment at `./venv/` with all packages installed (see setup below)
 
 ---
 
@@ -13,9 +13,9 @@
 Run once to create the virtual environment and install dependencies:
 
 ```powershell
-cd "C:\Users\athav\Downloads\ASIC_Ray_Tracer_HW-integration_tested\ASIC_Ray_Tracer_HW-integration_tested\Raytracing_Accelerator_new"
+Set-Location "C:\Users\athav\OneDrive\Documents\ASIC_Ray_Tracer_Shadows"
 python -m venv venv
-.\venv\Scripts\python.exe -m pip install cocotb cocotb-bus numpy pillow trimesh scipy
+.\venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
 ---
@@ -25,7 +25,7 @@ python -m venv venv
 ### Step 1 — Generate the scene (camera, rays, voxels)
 
 ```powershell
-cd "C:\Users\athav\Downloads\ASIC_Ray_Tracer_HW-integration_tested\ASIC_Ray_Tracer_HW-integration_tested\Raytracing_Accelerator_new"
+Set-Location "C:\Users\athav\OneDrive\Documents\ASIC_Ray_Tracer_Shadows"
 & ".\venv\Scripts\python.exe" rays_to_scene.py --stl Minecraft_ore_hollow.stl --out_dir out --w 128 --h 128
 ```
 
@@ -50,8 +50,7 @@ Outputs written to `out/`:
 ### Step 2 — Run the ASIC hardware simulation + render
 
 ```powershell
-Set-Location "C:\Users\athav\Downloads\ASIC_Ray_Tracer_HW-integration_tested\ASIC_Ray_Tracer_HW-integration_tested\Raytracing_Accelerator_new"
-$env:PYTHONPATH = (Get-Location).Path
+Set-Location "C:\Users\athav\OneDrive\Documents\ASIC_Ray_Tracer_Shadows"
 & ".\venv\Scripts\python.exe" run_simulation.py `
     --voxel-file out/voxels_load.txt `
     --color-file out/voxels_color.mem `
@@ -70,7 +69,8 @@ This will:
 ## Viewing the Output
 
 ```powershell
-Start-Process "C:\Users\athav\Downloads\ASIC_Ray_Tracer_HW-integration_tested\ASIC_Ray_Tracer_HW-integration_tested\Raytracing_Accelerator_new\minecraft_render.png"
+Set-Location "C:\Users\athav\OneDrive\Documents\ASIC_Ray_Tracer_Shadows"
+Start-Process minecraft_render.png
 ```
 
 ---
@@ -97,13 +97,12 @@ Edit `choose_camera_and_light()` in `rays_to_scene.py`. The current camera is to
 ## Quick Reference — Full Run (copy-paste)
 
 ```powershell
-Set-Location "C:\Users\athav\Downloads\ASIC_Ray_Tracer_HW-integration_tested\ASIC_Ray_Tracer_HW-integration_tested\Raytracing_Accelerator_new"
+Set-Location "C:\Users\athav\OneDrive\Documents\ASIC_Ray_Tracer_Shadows"
 
 # Step 1: generate scene
 & ".\venv\Scripts\python.exe" rays_to_scene.py --stl Minecraft_ore_hollow.stl --out_dir out --w 128 --h 128
 
 # Step 2: run hardware simulation + render
-$env:PYTHONPATH = (Get-Location).Path
 & ".\venv\Scripts\python.exe" run_simulation.py --voxel-file out/voxels_load.txt --color-file out/voxels_color.mem --ray-file out/ray_jobs.txt --output minecraft_render.png
 
 # View result

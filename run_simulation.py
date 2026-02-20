@@ -20,6 +20,7 @@ import os
 import sys
 from pathlib import Path
 
+
 # ── locate project root (same directory as this script) ──────────────────────
 PROJ = Path(__file__).resolve().parent
 
@@ -60,6 +61,10 @@ def parse_args():
 def main():
     args = parse_args()
 
+    # Ensure local modules (test_raytracer.py, voxel_loader.py, etc.) are importable
+    if str(PROJ) not in sys.path:
+        sys.path.insert(0, str(PROJ))
+
     # ── validate input files exist ────────────────────────────────────────────
     for attr, label in [("voxel_file", "VOXEL_FILE"),
                         ("color_file", "COLOR_FILE"),
@@ -95,6 +100,12 @@ def main():
 
     runner = get_runner("icarus")
 
+    # Windows: cocotb may need an explicit python DLL location.
+    # cocotb's find_libpython usually handles this, but providing it makes
+    # runs more reliable across shells/IDE launches.
+    python_dll_name = f"python{sys.version_info.major}{sys.version_info.minor}.dll"
+    python_dll_path = Path(sys.base_prefix) / python_dll_name
+
     # ── Step 1: Compile all SV files with iverilog ────────────────────────────
     print("\n[1/2] Compiling SystemVerilog sources with Icarus Verilog...")
     runner.build(
@@ -116,10 +127,12 @@ def main():
         hdl_toplevel="tb_raytracer_cocotb",
         testcase="test_render_image",
         extra_env={
+            "PYTHONPATH": str(PROJ),
             "VOXEL_FILE": str(Path(args.voxel_file).resolve()),
             "COLOR_FILE": str(Path(args.color_file).resolve()),
             "RAY_FILE":   str(Path(args.ray_file).resolve()),
             "OUTPUT_PNG": str(Path(args.output).resolve()),
+            **({"LIBPYTHON_LOC": str(python_dll_path)} if python_dll_path.exists() else {}),
         },
         build_dir=args.build_dir,
         waves=args.waves,
