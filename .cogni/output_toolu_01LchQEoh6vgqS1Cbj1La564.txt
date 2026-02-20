@@ -1,0 +1,22 @@
+=== Command: grep -A 10 "Test F" simulation_results/sim_2026-02-20T02-39-40-985Z/eda_results.json | grep -E "(PASS|FAIL|steps=)" (2026-02-20T02:40:57.967Z) ===
+Exit Code: 1
+Output:
+. : File C:\Users\sanjr\OneDrive\Documents\WindowsPowerShell\profile.ps1 cannot be loaded because running scripts is 
+disabled on this system. For more information, see about_Execution_Policies at 
+https:/go.microsoft.com/fwlink/?LinkID=135170.
+At line:1 char:3
++ . 'C:\Users\sanjr\OneDrive\Documents\WindowsPowerShell\profile.ps1'
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : SecurityError: (:) [], PSSecurityException
+    + FullyQualifiedErrorId : UnauthorizedAccess
+grep : The term 'grep' is not recognized as the name of a cmdlet, function, script file, or operable program. Check 
+the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ grep -A 10 "Test F" simulation_results/sim_2026-02-20T02-39-40-985Z/e ...
++ ~~~~
+    + CategoryInfo          : ObjectNotFound: (grep:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+
+=== End Output ===
+
