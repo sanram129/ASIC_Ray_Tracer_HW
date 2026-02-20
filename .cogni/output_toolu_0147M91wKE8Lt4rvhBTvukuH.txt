@@ -1,0 +1,12 @@
+=== Command: pwd (2026-02-20T18:38:52.641Z) ===
+Exit Code: 0
+Output:
+
+Path                                                         
+----                                                         
+C:\Users\parth\OneDrive\Desktop\Code Repos\ASIC_Ray_Tracer_HW
+
+
+
+=== End Output ===
+

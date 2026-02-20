@@ -1,0 +1,31 @@
+=== Command: vvp tb_bugfix.vvp 2>&1 | Select-String -Pattern "(TEST|PASS|FAIL|SUMMARY)"  (2026-02-20T18:46:14.890Z) ===
+Exit Code: 0
+Output:
+
+TEST START
+Bug Fix Verification Testbench
+Testing: Bug #1 (Bounds) and Bug #2 (Face ID)
+[BUG #1 TEST] Out-of-bounds detection
+  ✓ PASS: Ray correctly exited bounds (no wrap-around)
+[BUG #1 TEST] Negative direction bounds
+  ✓ PASS: Ray correctly exited bounds in negative direction
+[BUG #2 TEST] Face ID correct on hit
+  ✓ PASS: Correct face_id=0 (X+ face) for X-axis ray
+[BUG #2 TEST] Y-axis face ID
+  ✓ PASS: Correct face_id=2 (Y+ face) for Y-axis ray
+[BUG #2 TEST] Z-axis face ID
+  ✓ PASS: Correct face_id=4 (Z+ face) for Z-axis ray
+[INTEGRATION TEST] Immediate hit position and face
+  ✓ PASS: Immediate hit detected at correct position
+[INTEGRATION TEST] Simple straight-line path
+  ✓ PASS: Hit correct voxel with correct face
+BUG FIX VERIFICATION SUMMARY
+Total tests:  7
+Passed:       7
+Failed:       0
+TEST PASSED - ALL BUG FIXES VERIFIED!
+
+
+
+=== End Output ===
+

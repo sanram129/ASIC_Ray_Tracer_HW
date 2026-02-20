@@ -1,0 +1,8 @@
+=== Command: iverilog -g2012 -o tb_bugfix.vvp axis_choose.sv bounds_check.sv step_update.sv voxel_addr_map.sv voxel_ram.sv scene_loader_if.sv voxel_raytracer_core.sv ray_job_if.sv step_control_fsm.sv raytracer_top.sv tb_bugfix_verification.sv 2>&1 | Select-Object -Last 1 (2026-02-20T18:46:00.227Z) ===
+Exit Code: 1
+Output:
+step_update.sv:103: sorry: constant selects in always_* processes are not currently supported (all bits will be 
+included).
+
+=== End Output ===
+

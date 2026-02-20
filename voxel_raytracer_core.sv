@@ -36,10 +36,10 @@ module voxel_raytracer_core #(
     input  logic                 clk,
     input  logic                 rst_n,
     
-    // Ray Step Inputs (registered on entry)
-    input  logic [4:0]           ix_in,
-    input  logic [4:0]           iy_in,
-    input  logic [4:0]           iz_in,
+    // Ray Step Inputs (registered on entry) - 6-bit for bounds detection
+    input  logic [5:0]           ix_in,
+    input  logic [5:0]           iy_in,
+    input  logic [5:0]           iz_in,
     input  logic                 sx_in,
     input  logic                 sy_in,
     input  logic                 sz_in,
@@ -60,10 +60,10 @@ module voxel_raytracer_core #(
     output logic [ADDR_BITS:0]   write_count,
     output logic                 load_complete,
     
-    // Ray Step Outputs (pipelined - available 5 cycles after inputs)
-    output logic [4:0]           ix_out,
-    output logic [4:0]           iy_out,
-    output logic [4:0]           iz_out,
+    // Ray Step Outputs (pipelined - available 5 cycles after inputs) - 6-bit
+    output logic [5:0]           ix_out,
+    output logic [5:0]           iy_out,
+    output logic [5:0]           iz_out,
     output logic [W-1:0]         next_x_out,
     output logic [W-1:0]         next_y_out,
     output logic [W-1:0]         next_z_out,
@@ -77,7 +77,7 @@ module voxel_raytracer_core #(
     // =========================================================================
     // Pipeline Stage 1: Input Registers
     // =========================================================================
-    logic [4:0]  ix_s1, iy_s1, iz_s1;
+    logic [5:0]  ix_s1, iy_s1, iz_s1;
     logic        sx_s1, sy_s1, sz_s1;
     logic [W-1:0] next_x_s1, next_y_s1, next_z_s1;
     logic [W-1:0] inc_x_s1, inc_y_s1, inc_z_s1;
@@ -115,7 +115,7 @@ module voxel_raytracer_core #(
     );
     
     // Register stage 2 outputs
-    logic [4:0]  ix_s2, iy_s2, iz_s2;
+    logic [5:0]  ix_s2, iy_s2, iz_s2;
     logic        sx_s2, sy_s2, sz_s2;
     logic [W-1:0] next_x_s2, next_y_s2, next_z_s2;
     logic [W-1:0] inc_x_s2, inc_y_s2, inc_z_s2;
@@ -147,7 +147,7 @@ module voxel_raytracer_core #(
     // Pipeline Stage 3: step_update (Combinational)
     // Purpose: Compute next voxel position and updated timer values
     // =========================================================================
-    logic [4:0]  ix_next_s3, iy_next_s3, iz_next_s3;
+    logic [5:0]  ix_next_s3, iy_next_s3, iz_next_s3;
     logic [W-1:0] next_x_next_s3, next_y_next_s3, next_z_next_s3;
     logic [2:0]  face_mask_s3;
     logic [2:0]  primary_face_id_s3;
@@ -181,8 +181,8 @@ module voxel_raytracer_core #(
     // CRITICAL: We need both CURRENT and NEXT positions!
     // - CURRENT position (ix_s3_curr) is used for voxel RAM lookup
     // - NEXT position (ix_s3) is used for bounds check and next iteration
-    logic [4:0]  ix_s3_curr, iy_s3_curr, iz_s3_curr;  // CURRENT position
-    logic [4:0]  ix_s3, iy_s3, iz_s3;                 // NEXT position
+    logic [5:0]  ix_s3_curr, iy_s3_curr, iz_s3_curr;  // CURRENT position (6-bit)
+    logic [5:0]  ix_s3, iy_s3, iz_s3;                 // NEXT position (6-bit)
     logic [W-1:0] next_x_s3, next_y_s3, next_z_s3;
     logic [2:0]  face_mask_s3_q;
     logic [2:0]  primary_face_id_s3_q;
@@ -230,11 +230,11 @@ module voxel_raytracer_core #(
     logic out_of_bounds_s4;
     logic [ADDR_BITS-1:0] voxel_addr_s4;
     
-    // Zero-extend coordinates for bounds check (5-bit -> 6-bit)
-    // Check if NEXT position is out of bounds
-    assign bounds_ix = {1'b0, ix_s3};
-    assign bounds_iy = {1'b0, iy_s3};
-    assign bounds_iz = {1'b0, iz_s3};
+    // NEXT position is already 6-bit, use directly for bounds check
+    // Check if NEXT position is out of bounds (32-63 are OOB)
+    assign bounds_ix = ix_s3;
+    assign bounds_iy = iy_s3;
+    assign bounds_iz = iz_s3;
     
     bounds_check #(
         .COORD_W(COORD_W),
@@ -247,20 +247,21 @@ module voxel_raytracer_core #(
     );
     
     // Compute RAM address for CURRENT position (FIXED!)
+    // Use lower 5 bits only for RAM addressing (grid is 32x32x32)
     voxel_addr_map #(
         .X_BITS(5),
         .Y_BITS(5),
         .Z_BITS(5),
         .MAP_ZYX(1'b1)
     ) u_voxel_addr_map (
-        .x(ix_s3_curr),  // Use CURRENT position for voxel lookup
-        .y(iy_s3_curr),
-        .z(iz_s3_curr),
+        .x(ix_s3_curr[4:0]),  // Use CURRENT position lower 5 bits
+        .y(iy_s3_curr[4:0]),
+        .z(iz_s3_curr[4:0]),
         .addr(voxel_addr_s4)
     );
     
     // Register stage 4 outputs
-    logic [4:0]  ix_s4, iy_s4, iz_s4;  // NEXT position (for output)
+    logic [5:0]  ix_s4, iy_s4, iz_s4;  // NEXT position (for output) - 6-bit
     logic [W-1:0] next_x_s4, next_y_s4, next_z_s4;
     logic [2:0]  face_mask_s4;
     logic [2:0]  primary_face_id_s4;
@@ -343,7 +344,7 @@ module voxel_raytracer_core #(
     );
     
     // Register stage 5 outputs for final alignment
-    logic [4:0]  ix_s5, iy_s5, iz_s5;
+    logic [5:0]  ix_s5, iy_s5, iz_s5;
     logic [W-1:0] next_x_s5, next_y_s5, next_z_s5;
     logic [2:0]  face_mask_s5;
     logic [2:0]  primary_face_id_s5;

@@ -1,0 +1,17 @@
+=== Command: Get-ChildItem tb*.sv (2026-02-20T18:39:10.834Z) ===
+Exit Code: 0
+Output:
+
+
+    Directory: C:\Users\parth\OneDrive\Desktop\Code Repos\ASIC_Ray_Tracer_HW
+
+
+Mode                 LastWriteTime         Length Name                                                                 
+----                 -------------         ------ ----                                                                 
+-a----        2026-02-20   1:14 PM           5428 tb_raytracer_cocotb.sv                                               
+-a----        2026-02-20   1:14 PM          33997 tb_raytracer_top.sv                                                  
+
+
+
+=== End Output ===
+

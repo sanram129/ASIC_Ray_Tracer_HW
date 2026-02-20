@@ -1,0 +1,6 @@
+=== Command: Get-ChildItem -Path . -Filter "tb_raytracer_simple.sv" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 3 FullName (2026-02-20T18:38:45.125Z) ===
+Exit Code: 0
+Output:
+
+=== End Output ===
+

@@ -1,0 +1,38 @@
+=== Command: cd Raytracing_Accelerator_new; iverilog -g2012 -o test_compile.vvp step_update.sv voxel_raytracer_core.sv raytracer_top.sv 2>&1 (2026-02-20T18:35:03.136Z) ===
+Exit Code: 1
+Output:
+cd : Cannot find path 'C:\Users\parth\OneDrive\Desktop\Code Repos\ASIC_Ray_Tracer_HW\Raytracing_Accelerator_new' 
+because it does not exist.
+At line:1 char:1
++ cd Raytracing_Accelerator_new; iverilog -g2012 -o test_compile.vvp st ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\parth\...Accelerator_new:String) [Set-Location], ItemNotFoundE 
+   xception
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.SetLocationCommand
+ 
+iverilog : raytracer_top.sv:154: error: Unknown module type: ray_job_if
+At line:1 char:32
++ ... erator_new; iverilog -g2012 -o test_compile.vvp step_update.sv voxel_ ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (raytracer_top.s...ype: ray_job_if:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+raytracer_top.sv:212: error: Unknown module type: step_control_fsm
+voxel_raytracer_core.sv:109: error: Unknown module type: axis_choose
+voxel_raytracer_core.sv:242: error: Unknown module type: bounds_check
+voxel_raytracer_core.sv:256: error: Unknown module type: voxel_addr_map
+voxel_raytracer_core.sv:313: error: Unknown module type: scene_loader_if
+voxel_raytracer_core.sv:332: error: Unknown module type: voxel_ram
+8 error(s) during elaboration.
+*** These modules were missing:
+        axis_choose referenced 1 times.
+        bounds_check referenced 1 times.
+        ray_job_if referenced 1 times.
+        scene_loader_if referenced 1 times.
+        step_control_fsm referenced 1 times.
+        voxel_addr_map referenced 1 times.
+        voxel_ram referenced 1 times.
+***
+
+=== End Output ===
+

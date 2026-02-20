@@ -1,0 +1,15 @@
+=== Command: cd "c:\Users\parth\OneDrive\Desktop\Code Repos\ASIC_Ray_Tracer_HW"; Get-ChildItem Raytracing_Accelerator_new\tb*.sv (2026-02-20T18:38:32.743Z) ===
+Exit Code: 1
+Output:
+Get-ChildItem : Cannot find path 'C:\Users\parth\OneDrive\Desktop\Code 
+Repos\ASIC_Ray_Tracer_HW\Raytracing_Accelerator_new' because it does not exist.
+At line:1 char:69
++ ... \ASIC_Ray_Tracer_HW"; Get-ChildItem Raytracing_Accelerator_new\tb*.sv
++                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\parth\...Accelerator_new:String) [Get-ChildItem], ItemNotFound 
+   Exception
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetChildItemCommand
+ 
+
+=== End Output ===
+

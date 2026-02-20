@@ -1,0 +1,20 @@
+=== Command: vvp tb_bugfix.vvp | Select-String -Pattern "BUG #2.*Z-axis" -Context 0,10 (2026-02-20T18:45:30.481Z) ===
+Exit Code: 0
+Output:
+
+> [BUG #2 TEST] Z-axis face ID
+    Ray from (10,10,10) moving in +Z, hitting voxel at (10,10,20)
+    Expected face_id: 4 (Z+ face)
+    Scene check: voxel_grid[10][10][20] = 1
+    Result: ray_hit=0, ray_timeout=0, hit=(10,18,10), face=4, steps=21
+    ✗ FAIL: Incorrect result for Z-axis ray
+      ray_hit=0 (expected 1), hit_voxel_z=10 (expected 20), face_id=4 (expected 4)
+      Full hit position: (10,18,10)
+  
+  [INTEGRATION TEST] Immediate hit position and face
+    Ray starting AT solid voxel (12,12,12)
+
+
+
+=== End Output ===
+

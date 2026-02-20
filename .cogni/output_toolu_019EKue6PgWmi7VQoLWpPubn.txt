@@ -1,0 +1,13 @@
+=== Command: iverilog -g2012 -o tb_fixed.vvp axis_choose.sv bounds_check.sv step_update.sv voxel_addr_map.sv voxel_ram.sv scene_loader_if.sv voxel_raytracer_core.sv ray_job_if.sv step_control_fsm.sv raytracer_top.sv tb_raytracer_top.sv 2>&1 | Select-Object -First 15 (2026-02-20T18:41:22.332Z) ===
+Exit Code: 1
+Output:
+iverilog : tb_raytracer_top.sv:78: sorry: Unpacked structs not supported.
+At line:1 char:1
++ iverilog -g2012 -o tb_fixed.vvp axis_choose.sv bounds_check.sv step_u ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (tb_raytracer_to... not supported.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+=== End Output ===
+

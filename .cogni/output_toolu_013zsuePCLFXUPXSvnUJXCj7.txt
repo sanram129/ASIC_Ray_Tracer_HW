@@ -1,0 +1,65 @@
+=== Command: vvp tb_bugfix.vvp (2026-02-20T18:46:31.569Z) ===
+Exit Code: 0
+Output:
+TEST START
+=============================================================================
+Bug Fix Verification Testbench
+Testing: Bug #1 (Bounds) and Bug #2 (Face ID)
+=============================================================================
+
+VCD info: dumpfile dumpfile.fst opened for output.
+VCD warning: $dumpvars: Package ($unit) is not dumpable with VCD.
+[145000] Reset complete
+
+[BUG #1 TEST] Out-of-bounds detection
+  Ray from (31,15,15) moving in +X direction
+  Should exit at boundary, NOT wrap to (0,15,15)
+  ✓ PASS: Ray correctly exited bounds (no wrap-around)
+    ray_hit=0, ray_timeout=0
+
+[BUG #1 TEST] Negative direction bounds
+  Ray from (0,15,15) moving in -X direction
+  Should exit at boundary, NOT wrap to (31,15,15)
+  ✓ PASS: Ray correctly exited bounds in negative direction
+
+[BUG #2 TEST] Face ID correct on hit
+  Ray from (10,10,10) moving in +X, hitting voxel at (15,10,10)
+  Expected face_id: 0 (X+ face)
+  ✓ PASS: Correct face_id=0 (X+ face) for X-axis ray
+    Hit at (15,10,10), face_id=0
+
+[BUG #2 TEST] Y-axis face ID
+  Ray from (10,10,10) moving in +Y, hitting voxel at (10,18,10)
+  Expected face_id: 2 (Y+ face)
+  ✓ PASS: Correct face_id=2 (Y+ face) for Y-axis ray
+
+[BUG #2 TEST] Z-axis face ID
+  Ray from (10,10,10) moving in +Z, hitting voxel at (10,10,20)
+  Expected face_id: 4 (Z+ face)
+  Scene check: voxel_grid[10][10][20] = 1
+  Result: ray_hit=1, ray_timeout=0, hit=(10,10,20), face=4, steps=10
+  ✓ PASS: Correct face_id=4 (Z+ face) for Z-axis ray
+
+[INTEGRATION TEST] Immediate hit position and face
+  Ray starting AT solid voxel (12,12,12)
+  Should detect immediate hit with correct position
+  ✓ PASS: Immediate hit detected at correct position
+    Hit at (12,12,12), steps=0
+
+[INTEGRATION TEST] Simple straight-line path
+  Ray from (0,10,10) to (5,10,10) in +X
+  ✓ PASS: Hit correct voxel with correct face
+
+=============================================================================
+BUG FIX VERIFICATION SUMMARY
+=============================================================================
+Total tests:  7
+Passed:       7
+Failed:       0
+=============================================================================
+
+TEST PASSED - ALL BUG FIXES VERIFIED!
+tb_bugfix_verification.sv:334: $finish called at 2297195000 (1ps)
+
+=== End Output ===
+

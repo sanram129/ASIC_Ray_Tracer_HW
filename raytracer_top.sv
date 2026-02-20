@@ -45,9 +45,9 @@ module raytracer_top #(
     
     // Address and step parameters
     parameter int ADDR_BITS = 15,          // Memory address bits (32^3 = 2^15)
-    parameter int X_BITS = 5,              // X coordinate bits
-    parameter int Y_BITS = 5,              // Y coordinate bits  
-    parameter int Z_BITS = 5,              // Z coordinate bits
+    parameter int X_BITS = 6,              // X coordinate bits (6-bit for bounds detection)
+    parameter int Y_BITS = 6,              // Y coordinate bits (6-bit for bounds detection)
+    parameter int Z_BITS = 6,              // Z coordinate bits (6-bit for bounds detection)
     parameter int MAX_STEPS_BITS = 10,     // Max steps counter width
     parameter int STEP_COUNT_WIDTH = 16    // Step counter width for FSM
 )(
@@ -367,7 +367,7 @@ module raytracer_top #(
     // WIDTH CONVERSIONS:
     // - COORD_WIDTH (16-bit) is over-provisioned for result outputs to allow
     //   future expansion beyond 32^3 grids
-    // - Actual voxel coordinates are X_BITS/Y_BITS/Z_BITS (5-bit = 0..31)
+    // - Actual voxel coordinates are X_BITS/Y_BITS/Z_BITS (6-bit = 0..63, valid range 0..31)
     // - TIMER_WIDTH and W should match (both 32-bit in default configuration)
     // - Zero-extension used for width conversions when parameters differ
     //
