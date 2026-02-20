@@ -96,6 +96,11 @@ module step_control_fsm #(
     logic                        timeout_flag;
     logic                        bounds_flag;
     
+    // Previous voxel position to detect when position changes
+    logic [X_BITS-1:0]           voxel_x_prev;
+    logic [Y_BITS-1:0]           voxel_y_prev;
+    logic [Z_BITS-1:0]           voxel_z_prev;
+    
     //----------------------------------------------------------------------
     // State Register
     //----------------------------------------------------------------------
@@ -166,17 +171,23 @@ module step_control_fsm #(
             hit_y_reg       <= '0;
             hit_z_reg       <= '0;
             face_reg        <= 3'b000;
-            hit_flag        <= 1'b0;
-            timeout_flag    <= 1'b0;
-            bounds_flag     <= 1'b0;
+            hit_flag         <= 1'b0;
+            timeout_flag     <= 1'b0;
+            bounds_flag      <= 1'b0;
+            voxel_x_prev     <= '0;
+            voxel_y_prev     <= '0;
+            voxel_z_prev     <= '0;
         end else begin
             case (current_state)
                 IDLE: begin
                     // Reset flags
-                    hit_flag     <= 1'b0;
-                    timeout_flag <= 1'b0;
-                    bounds_flag  <= 1'b0;
-                    step_counter <= '0;
+                    hit_flag         <= 1'b0;
+                    timeout_flag     <= 1'b0;
+                    bounds_flag      <= 1'b0;
+                    step_counter     <= '0;
+                    voxel_x_prev     <= '0;
+                    voxel_y_prev     <= '0;
+                    voxel_z_prev     <= '0;
                 end
                 
                 INIT: begin
@@ -192,6 +203,11 @@ module step_control_fsm #(
                 end
                 
                 RUNNING: begin
+                    // Track previous voxel position for change detection
+                    voxel_x_prev <= voxel_x_reg;
+                    voxel_y_prev <= voxel_y_reg;
+                    voxel_z_prev <= voxel_z_reg;
+                    
                     // When pipeline returns valid data, process it
                     if (solid_valid) begin
                         // Check termination conditions
@@ -219,7 +235,10 @@ module step_control_fsm #(
                             timer_y_reg <= pipeline_next_timer_y;
                             timer_z_reg <= pipeline_next_timer_z;
                             face_reg    <= pipeline_face_id;
-                            step_counter <= step_counter + 1'b1;
+                            // Increment counter only when position changes from previous cycle
+                            if ((voxel_x_reg != voxel_x_prev) || (voxel_y_reg != voxel_y_prev) || (voxel_z_reg != voxel_z_prev)) begin
+                                step_counter <= step_counter + 1'b1;
+                            end
                         end
                     end
                 end
