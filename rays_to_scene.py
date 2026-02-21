@@ -39,14 +39,13 @@ EPS_DIR = 1e-12
 EPS_ADVANCE = 1e-6
 
 # =============================================================================
-# LIGHT POSITION — default light position (voxel-world coords).
-# This is written into camera_light.json and read by test_raytracer.py.
-# You can override this at runtime with: --light LX LY LZ
+# LIGHT POSITION(S)
 #
-# NOTE: Keep the light reasonably close to the 32^3 world to get visible
-# gradients (a too-distant light becomes almost directional and looks flatter).
+# Default: one point light at LIGHT_POS.
+# For multiple lights, pass one or more `--light X Y Z` on the command line.
+# These positions are written into camera_light.json and read by test_raytracer.py.
 # =============================================================================
-LIGHT_POS = np.array([10.0, 40.0, 30.0], dtype=np.float64)  # requested: X=10, Y=40, Z=30
+LIGHT_POS = np.array([10.0, 40.0, 30.0], dtype=np.float64)
 
 # =============================================================================
 # CAMERA OVERRIDE — set CAM_POS to an [X, Y, Z] array to fix the camera at
@@ -87,13 +86,13 @@ def build_camera_basis(cam_pos: np.ndarray, look_at: np.ndarray, world_up: np.nd
     return forward, right, up
 
 
-def choose_camera_and_light(bounds_min_world: np.ndarray, bounds_max_world: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def choose_camera_and_light(bounds_min_world: np.ndarray, bounds_max_world: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Returns (cam_pos, look_at, light_pos).
+    Returns (cam_pos, look_at).
 
     Camera position: uses CAM_POS override if set, otherwise auto top-down.
     Look-at target:  uses CAM_LOOK_AT override if set, otherwise scene center.
-    Light position:  always from LIGHT_POS constant.
+    Light position(s): provided separately (LIGHT_POS by default, or --light overrides).
     """
     center = 0.5 * (bounds_min_world + bounds_max_world)
     diag   = float(np.linalg.norm(bounds_max_world - bounds_min_world))
@@ -107,7 +106,7 @@ def choose_camera_and_light(bounds_min_world: np.ndarray, bounds_max_world: np.n
 
     look_at = np.array(CAM_LOOK_AT, dtype=np.float64) if CAM_LOOK_AT is not None else center
 
-    return cam_pos, look_at, LIGHT_POS.copy()
+    return cam_pos, look_at
 
 
 def intersect_aabb(origin: np.ndarray, direction: np.ndarray, bmin: np.ndarray, bmax: np.ndarray) -> Tuple[bool, float, float]:
@@ -260,14 +259,11 @@ def main() -> None:
     ap.add_argument("--downsample", action="store_true", help="Downsample to 16x16x16 at corner with floor and walls")
     ap.add_argument(
         "--light",
-        type=float,
         nargs=3,
-        default=None,
-        metavar=("LX", "LY", "LZ"),
-        help=(
-            "Override the point light position, in voxel-world coords. "
-            "Example: --light 16 60 5"
-        ),
+        type=float,
+        action="append",
+        metavar=("X", "Y", "Z"),
+        help="Point light position in world coords. Repeat to add multiple lights.",
     )
     args = ap.parse_args()
 
@@ -348,12 +344,19 @@ def main() -> None:
     }
     meta_json.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
-    # --- 2) Choose camera + light ---
-    cam_pos, look_at, light_pos = choose_camera_and_light(bmin_w, bmax_w)
-    # Single override via --light LX LY LZ
-    if args.light is not None:
-        light_pos = np.array(args.light, dtype=np.float64)
+    # --- 2) Choose camera + light(s) ---
+    cam_pos, look_at = choose_camera_and_light(bmin_w, bmax_w)
     forward, right, up = build_camera_basis(cam_pos, look_at, np.array([0.0, 1.0, 0.0], dtype=np.float64))
+
+    light_positions = []
+    if args.light:
+        for xyz in args.light:
+            light_positions.append(np.array(xyz, dtype=np.float64))
+    else:
+        light_positions = [LIGHT_POS.copy()]
+
+    # Legacy single-light field (keep older testbenches working)
+    light_pos_legacy = light_positions[0].copy()
 
     cam_light = {
         "world_box": {"min": WORLD_MIN.tolist(), "max": WORLD_MAX.tolist()},
@@ -369,12 +372,14 @@ def main() -> None:
         },
         "light": {
             "type": "point",
-            "pos": light_pos.tolist(),
-            "note": (
-                "Light set via --light override." if args.light is not None
-                else "Edit LIGHT_POS constant in rays_to_scene.py to reposition, or pass --light. Re-run to update."
-            ),
+            "pos": light_pos_legacy.tolist(),
+            "note": "Default is LIGHT_POS in rays_to_scene.py; override/add with one or more --light X Y Z. Re-run rays_to_scene.py to update.",
         },
+        "lights": [
+            {"type": "point", "pos": lp.tolist()}
+            for lp in light_positions
+        ],
+        "light_positions": [lp.tolist() for lp in light_positions],
         "fixed_point": {"W": int(args.wbits), "FRAC": int(args.frac)},
     }
     (out_dir / "camera_light.json").write_text(json.dumps(cam_light, indent=2), encoding="utf-8")
