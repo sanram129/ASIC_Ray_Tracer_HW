@@ -50,7 +50,6 @@ CAMERA_LIGHT_FILE = os.environ.get("CAMERA_LIGHT_FILE", "")
 
 # ---------------------------------------------------------------------------
 # Light position: loaded from camera_light.json (written by rays_to_scene.py).
-# To move the light, edit LIGHT_POS in rays_to_scene.py and re-run scene gen.
 # Falls back to a sensible default if the JSON is not found.
 # ---------------------------------------------------------------------------
 def _load_camera_json() -> dict:
@@ -69,16 +68,22 @@ def _load_camera_json() -> dict:
     return {}
 
 
-def _load_light_pos() -> np.ndarray:
-    """Load light position from camera_light.json, or return fallback."""
+def _load_light_position() -> np.ndarray:
+    """Load a single point light position from camera_light.json."""
     data = _load_camera_json()
-    if data:
-        return np.array(data["light"]["pos"], dtype=np.float32)
-    return np.array([16.0, 60.0, 5.0], dtype=np.float32)
+    fallback = np.array([16.0, 60.0, 5.0], dtype=np.float32)
+    if not data:
+        return fallback
+
+    try:
+        pos = np.array(data["light"]["pos"], dtype=np.float32)
+        return pos if pos.shape == (3,) else fallback
+    except Exception:
+        return fallback
 
 
 _CAMERA_JSON = _load_camera_json()
-LIGHT_POS    = _load_light_pos()
+LIGHT_POS = _load_light_position()
 AMBIENT      = 0.12
 EXPOSURE     = 0.60   # overall brightness scale applied before gamma (< 1 = darker)
 CONTRAST     = 1.10   # mild linear contrast applied before gamma (>1 increases contrast)
@@ -92,6 +97,63 @@ SKY_COLOR = np.array([0.4, 0.6, 1.0], dtype=np.float32)   # background blue
 ENABLE_SHADOWS = True
 SHADOW_BIAS = 1e-3      # world-units bias along surface normal to avoid self-hit
 SHADOW_EPS_T = 1e-4     # small reduction from light distance to avoid boundary tie
+
+
+async def _is_shadowed_to_light(
+    dut,
+    *,
+    hit_pos: np.ndarray,
+    normal: np.ndarray,
+    light_pos: np.ndarray,
+    primary_voxel_xyz: tuple[int, int, int],
+    px: int,
+    py: int,
+) -> bool:
+    """Return True if geometry occludes the segment from the surface to the light."""
+
+    # Shadow ray: start slightly outside the surface to avoid self-hit.
+    hit_pos64 = hit_pos.astype(np.float64)
+    normal64 = normal.astype(np.float64)
+    light64 = light_pos.astype(np.float64)
+    shadow_origin = hit_pos64 + normal64 * float(SHADOW_BIAS)
+
+    to_light = light64 - shadow_origin
+    dist = float(np.linalg.norm(to_light))
+    if dist <= 1e-6:
+        return False
+
+    shadow_dir = _normalize(to_light.astype(np.float64))
+
+    sjob = _make_option_b_job(
+        shadow_origin,
+        shadow_dir,
+        wbits=FIXED_W,
+        frac=FIXED_FRAC,
+        max_steps=512,
+    )
+    if not sjob.get("valid", 0):
+        return False
+
+    # Limit travel to the light distance.
+    t_end = max(0.0, dist - float(SHADOW_EPS_T))
+    t_end_fx = _to_fixed_nonneg(t_end, FIXED_W, FIXED_FRAC)
+    sjob["max_steps"] = _shadow_step_budget(sjob, t_end_fx)
+
+    sjob["px"] = px
+    sjob["py"] = py
+
+    ok_shadow = await _send_ray_job(dut, sjob, timeout_cycles=4000)
+    if not ok_shadow:
+        return False
+    if not dut.ray_hit.value:
+        return False
+
+    sxh = int(dut.hit_voxel_x.value)
+    syh = int(dut.hit_voxel_y.value)
+    szh = int(dut.hit_voxel_z.value)
+    x0, y0, z0 = primary_voxel_xyz
+    # Ignore pathological self-hit if it happens.
+    return not (sxh == x0 and syh == y0 and szh == z0)
 
 # Fixed-point settings used by ray job encoding (must match rays_to_scene.py output)
 _FIXED = (_CAMERA_JSON.get("fixed_point", {}) if _CAMERA_JSON else {})
@@ -287,7 +349,8 @@ def _shadow_step_budget(job: dict, t_end_fx: int) -> int:
             m = next_y
         if next_z < m:
             m = next_z
-        if m > int(t_end_fx):
+        # Stop before stepping to/through the voxel boundary at the light distance.
+        if m >= int(t_end_fx):
             break
 
         # Deterministic tie-break matches axis_choose.sv
@@ -543,9 +606,16 @@ async def _send_ray_job(dut, job: dict, timeout_cycles: int = 4000) -> bool:
 
     Returns True on success, False on timeout.
     """
+    # Optional performance stats (for presentations / theme writeups)
+    stats = job.get("_stats") if isinstance(job, dict) else None
+    if stats is not None and not isinstance(stats, dict):
+        stats = None
+
     # --- 1. Wait for job_ready (stay in ReadWrite phase so we can write after) ---
+    ready_wait_cycles = 0
     for _ in range(1000):
         await RisingEdge(dut.clk)
+        ready_wait_cycles += 1
         if dut.job_ready.value:
             break
     else:
@@ -575,9 +645,14 @@ async def _send_ray_job(dut, job: dict, timeout_cycles: int = 4000) -> bool:
     dut.job_valid.value = 0
 
     # --- 4. Poll for ray_done (read in ReadWrite phase) ---
+    done_wait_cycles = 0
     for _ in range(timeout_cycles):
         await RisingEdge(dut.clk)
+        done_wait_cycles += 1
         if dut.ray_done.value:
+            if stats is not None:
+                stats.setdefault("ready_wait_cycles", []).append(int(ready_wait_cycles))
+                stats.setdefault("done_wait_cycles", []).append(int(done_wait_cycles))
             return True
 
     log.error(
@@ -669,6 +744,13 @@ async def test_render_image(dut):
     hit_count  = 0
     miss_count = 0
 
+    perf = {
+        "ready_wait_cycles": [],
+        "done_wait_cycles": [],
+        "steps_taken": [],
+        "clock_period_ns": 10.0,
+    }
+
     for idx, job in enumerate(jobs):
 
         # valid=0 means the primary ray never intersects the voxel world AABB.
@@ -678,11 +760,20 @@ async def test_render_image(dut):
             miss_count += 1
             continue
 
+        # Attach stats collector for primary rays only.
+        job["_stats"] = perf
         ok = await _send_ray_job(dut, job)
+        job.pop("_stats", None)
         if not ok:
             # Timeout: leave pixel as sky colour
             miss_count += 1
             continue
+
+        # Record steps_taken for this ray (valid after ray_done)
+        try:
+            perf["steps_taken"].append(int(dut.steps_taken.value))
+        except Exception:
+            pass
 
         if dut.ray_hit.value:
             # ── Geometry from ASIC outputs ───────────────────────────────────
@@ -716,55 +807,25 @@ async def test_render_image(dut):
             else:
                 hit_pos = np.array([x + 0.5, y + 0.5, z + 0.5], dtype=np.float32)
 
+            # Lambertian diffuse shading from a single point light.
             light_dir = _normalize(LIGHT_POS - hit_pos)
-            diffuse   = float(np.dot(normal, light_dir))
-            diffuse   = max(0.0, diffuse)
+            diff = float(np.dot(normal, light_dir))
+            if diff <= 0.0:
+                diff = 0.0
+            elif ENABLE_SHADOWS and diff > 1e-6:
+                shadowed = await _is_shadowed_to_light(
+                    dut,
+                    hit_pos=hit_pos,
+                    normal=normal,
+                    light_pos=LIGHT_POS,
+                    primary_voxel_xyz=(x, y, z),
+                    px=job["px"],
+                    py=job["py"],
+                )
+                if shadowed:
+                    diff = 0.0
 
-            # ── Hard shadows (secondary ray to point light) ───────────────────
-            shadowed = False
-            if ENABLE_SHADOWS and diffuse > 1e-6:
-                # Shadow ray: start slightly outside the surface to avoid self-hit
-                hit_pos64 = hit_pos.astype(np.float64)
-                normal64 = normal.astype(np.float64)
-                light64 = LIGHT_POS.astype(np.float64)
-
-                to_light = light64 - hit_pos64
-                dist = float(np.linalg.norm(to_light))
-                if dist > 1e-6:
-                    shadow_dir = _normalize(to_light.astype(np.float64))
-                    shadow_origin = hit_pos64 + normal64 * float(SHADOW_BIAS)
-
-                    sjob = _make_option_b_job(
-                        shadow_origin,
-                        shadow_dir,
-                        wbits=FIXED_W,
-                        frac=FIXED_FRAC,
-                        max_steps=512,
-                    )
-
-                    if sjob.get("valid", 0):
-                        # Convert light distance to fixed-point and compute a step budget.
-                        t_end = max(0.0, dist - float(SHADOW_EPS_T))
-                        t_end_fx = _to_fixed_nonneg(t_end, FIXED_W, FIXED_FRAC)
-                        sjob["max_steps"] = _shadow_step_budget(sjob, t_end_fx)
-
-                        # Provide px/py for helpful error messages.
-                        sjob["px"] = job["px"]
-                        sjob["py"] = job["py"]
-
-                        ok_shadow = await _send_ray_job(dut, sjob, timeout_cycles=4000)
-                        if ok_shadow and dut.ray_hit.value:
-                            sxh = int(dut.hit_voxel_x.value)
-                            syh = int(dut.hit_voxel_y.value)
-                            szh = int(dut.hit_voxel_z.value)
-                            # Ignore pathological self-hit if it happens.
-                            shadowed = not (sxh == x and syh == y and szh == z)
-
-            # Energy-conserving diffuse with shadowing
-            if shadowed:
-                brightness = AMBIENT
-            else:
-                brightness = AMBIENT + (1.0 - AMBIENT) * diffuse
+            brightness = AMBIENT + (1.0 - AMBIENT) * float(min(1.0, max(0.0, diff)))
 
             pixel = base_color * brightness
             image[job["py"], job["px"]] = pixel
@@ -785,9 +846,11 @@ async def test_render_image(dut):
     # 8. Overlay light source as a white dot
     # -------------------------------------------------------------------------
     if _CAMERA_JSON:
+        dot_r = max(3, int(min(img_w, img_h) * 0.04))
         lp = _project_to_pixel(LIGHT_POS.astype(np.float64), _CAMERA_JSON, img_w, img_h)
-        if lp is not None:
-            dot_r = max(3, int(min(img_w, img_h) * 0.04))
+        if lp is None:
+            log.info("  Light is behind the camera — dot not rendered")
+        else:
             for dy in range(-dot_r, dot_r + 1):
                 for dx in range(-dot_r, dot_r + 1):
                     if dx * dx + dy * dy <= dot_r * dot_r:
@@ -795,8 +858,6 @@ async def test_render_image(dut):
                         if 0 <= ry < img_h and 0 <= rx < img_w:
                             image[ry, rx] = np.array([1.0, 1.0, 1.0], dtype=np.float32)
             log.info(f"  Light dot drawn at pixel ({lp[0]}, {lp[1]})  radius={dot_r}px")
-        else:
-            log.info("  Light source is behind the camera — dot not rendered")
 
     # -------------------------------------------------------------------------
     # 9. Gamma-correct, convert float [0,1] → uint8 [0,255] and save PNG
@@ -810,6 +871,41 @@ async def test_render_image(dut):
     pil_image = Image.fromarray(img_uint8, mode="RGB")
 
     pil_image.save(OUTPUT_PNG)
+
+    # -------------------------------------------------------------------------
+    # 10. Performance summary (jobs/s, cycles/ray, steps/ray)
+    # -------------------------------------------------------------------------
+    try:
+        import statistics as _stats_mod
+
+        rr = perf.get("ready_wait_cycles", [])
+        dd = perf.get("done_wait_cycles", [])
+        ss = perf.get("steps_taken", [])
+        if dd:
+            clk_ns = float(perf.get("clock_period_ns", 10.0))
+            f_hz = 1e9 / clk_ns
+            avg_ready = float(_stats_mod.mean(rr)) if rr else 0.0
+            avg_done = float(_stats_mod.mean(dd))
+            avg_steps = float(_stats_mod.mean(ss)) if ss else float("nan")
+
+            # Total cycles per ray from job latch to ray_done. (Does not include scene load.)
+            rays_per_sec_100mhz = f_hz / avg_done if avg_done > 0 else 0.0
+            rays_per_sec_66mhz = (66e6 / f_hz) * rays_per_sec_100mhz if f_hz > 0 else 0.0
+            rays_per_sec_33mhz = (33e6 / f_hz) * rays_per_sec_100mhz if f_hz > 0 else 0.0
+
+            log.info("-" * 60)
+            log.info("Performance (primary rays only):")
+            log.info(f"  Clock period        : {clk_ns:.1f} ns  ({f_hz/1e6:.1f} MHz)")
+            log.info(f"  Avg ready-wait      : {avg_ready:.1f} cycles")
+            log.info(f"  Avg cycles to done  : {avg_done:.1f} cycles")
+            if ss:
+                log.info(f"  Avg DDA steps_taken : {avg_steps:.1f} steps")
+            log.info(f"  Throughput @ {f_hz/1e6:.1f} MHz: {rays_per_sec_100mhz:,.0f} rays/s")
+            log.info(f"  Scaled @ 66 MHz     : {rays_per_sec_66mhz:,.0f} rays/s")
+            log.info(f"  Scaled @ 33 MHz     : {rays_per_sec_33mhz:,.0f} rays/s")
+            log.info("-" * 60)
+    except Exception as e:
+        log.warning(f"Perf summary skipped: {e}")
 
     log.info("=" * 60)
     log.info(f"  Render complete!")

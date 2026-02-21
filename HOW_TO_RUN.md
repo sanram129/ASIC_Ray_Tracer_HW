@@ -1,9 +1,16 @@
 # ASIC Ray Tracer — How to Run
 
+## Demo GUI (recommended)
+
+If you just want to upload an STL, move the light, and render from your browser, use the Gradio GUI:
+
+- Instructions: **HOW_TO_RUN_GUI.md**
+- Launch: `python gui_gradio.py` (inside your venv)
+
 ## Prerequisites
 
 - **Icarus Verilog 12** on your `PATH` (`iverilog -V` should work)
-- **Python 3.13** installed
+- **Python 3.10+** installed
 - A virtual environment at `./venv/` with all packages installed (see setup below)
 
 ---
@@ -12,10 +19,20 @@
 
 Run once to create the virtual environment and install dependencies:
 
+### Windows (PowerShell)
+
+From the repo folder (the one containing `rays_to_scene.py`):
+
 ```powershell
-Set-Location "C:\Users\athav\OneDrive\Documents\ASIC_Ray_Tracer_Shadows"
 python -m venv venv
 .\venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+### macOS/Linux (bash)
+
+```bash
+python3 -m venv venv
+./venv/bin/python -m pip install -r requirements.txt
 ```
 
 ---
@@ -24,9 +41,16 @@ python -m venv venv
 
 ### Step 1 — Generate the scene (camera, rays, voxels)
 
+#### Windows (PowerShell)
+
 ```powershell
-Set-Location "C:\Users\athav\OneDrive\Documents\ASIC_Ray_Tracer_Shadows"
-& ".\venv\Scripts\python.exe" rays_to_scene.py --stl Minecraft_ore_hollow.stl --out_dir out --w 128 --h 128
+.\venv\Scripts\python.exe rays_to_scene.py --stl Minecraft_ore_hollow.stl --out_dir out --w 128 --h 128
+```
+
+#### macOS/Linux (bash)
+
+```bash
+./venv/bin/python rays_to_scene.py --stl Minecraft_ore_hollow.stl --out_dir out --w 128 --h 128
 ```
 
 **Options:**
@@ -49,12 +73,23 @@ Outputs written to `out/`:
 
 ### Step 2 — Run the ASIC hardware simulation + render
 
+#### Windows (PowerShell)
+
 ```powershell
-Set-Location "C:\Users\athav\OneDrive\Documents\ASIC_Ray_Tracer_Shadows"
-& ".\venv\Scripts\python.exe" run_simulation.py `
+.\venv\Scripts\python.exe run_simulation.py `
     --voxel-file out/voxels_load.txt `
     --color-file out/voxels_color.mem `
     --ray-file   out/ray_jobs.txt `
+    --output     minecraft_render.png
+```
+
+#### macOS/Linux (bash)
+
+```bash
+./venv/bin/python run_simulation.py \
+    --voxel-file out/voxels_load.txt \
+    --color-file out/voxels_color.mem \
+    --ray-file   out/ray_jobs.txt \
     --output     minecraft_render.png
 ```
 
@@ -68,14 +103,37 @@ This will:
 
 ## Viewing the Output
 
+### Windows (PowerShell)
+
 ```powershell
-Set-Location "C:\Users\athav\OneDrive\Documents\ASIC_Ray_Tracer_Shadows"
-Start-Process minecraft_render.png
+Start-Process .\minecraft_render.png
+```
+
+### macOS
+
+```bash
+open minecraft_render.png
+```
+
+### Linux
+
+```bash
+xdg-open minecraft_render.png
 ```
 
 ---
 
 ## Changing the Light Position
+
+You can either pass a flag **or** edit the constant.
+
+### Option A (recommended): CLI flag
+
+```powershell
+.\venv\Scripts\python.exe rays_to_scene.py --stl Minecraft_ore_hollow.stl --out_dir out --w 128 --h 128 --light 16 60 5
+```
+
+### Option B: edit the constant
 
 Edit **one line** in `rays_to_scene.py`:
 
@@ -97,13 +155,11 @@ Edit `choose_camera_and_light()` in `rays_to_scene.py`. The current camera is to
 ## Quick Reference — Full Run (copy-paste)
 
 ```powershell
-Set-Location "C:\Users\athav\OneDrive\Documents\ASIC_Ray_Tracer_Shadows"
-
 # Step 1: generate scene
-& ".\venv\Scripts\python.exe" rays_to_scene.py --stl Minecraft_ore_hollow.stl --out_dir out --w 128 --h 128
+.\venv\Scripts\python.exe rays_to_scene.py --stl Minecraft_ore_hollow.stl --out_dir out --w 128 --h 128
 
 # Step 2: run hardware simulation + render
-& ".\venv\Scripts\python.exe" run_simulation.py --voxel-file out/voxels_load.txt --color-file out/voxels_color.mem --ray-file out/ray_jobs.txt --output minecraft_render.png
+.\venv\Scripts\python.exe run_simulation.py --voxel-file out/voxels_load.txt --color-file out/voxels_color.mem --ray-file out/ray_jobs.txt --output minecraft_render.png
 
 # View result
 Start-Process minecraft_render.png

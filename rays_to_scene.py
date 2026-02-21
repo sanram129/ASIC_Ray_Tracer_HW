@@ -39,8 +39,9 @@ EPS_DIR = 1e-12
 EPS_ADVANCE = 1e-6
 
 # =============================================================================
-# LIGHT POSITION — edit this to move the light. Units are voxel-world coords.
+# LIGHT POSITION — default light position (voxel-world coords).
 # This is written into camera_light.json and read by test_raytracer.py.
+# You can override this at runtime with: --light LX LY LZ
 #
 # NOTE: Keep the light reasonably close to the 32^3 world to get visible
 # gradients (a too-distant light becomes almost directional and looks flatter).
@@ -257,6 +258,17 @@ def main() -> None:
     ap.add_argument("--frac", type=int, default=16, help="Fixed-point fractional bits")
     ap.add_argument("--max_steps", type=int, default=512, help="max_steps sent to ASIC")
     ap.add_argument("--downsample", action="store_true", help="Downsample to 16x16x16 at corner with floor and walls")
+    ap.add_argument(
+        "--light",
+        type=float,
+        nargs=3,
+        default=None,
+        metavar=("LX", "LY", "LZ"),
+        help=(
+            "Override the point light position, in voxel-world coords. "
+            "Example: --light 16 60 5"
+        ),
+    )
     args = ap.parse_args()
 
     out_dir = args.out_dir
@@ -338,6 +350,9 @@ def main() -> None:
 
     # --- 2) Choose camera + light ---
     cam_pos, look_at, light_pos = choose_camera_and_light(bmin_w, bmax_w)
+    # Single override via --light LX LY LZ
+    if args.light is not None:
+        light_pos = np.array(args.light, dtype=np.float64)
     forward, right, up = build_camera_basis(cam_pos, look_at, np.array([0.0, 1.0, 0.0], dtype=np.float64))
 
     cam_light = {
@@ -355,7 +370,10 @@ def main() -> None:
         "light": {
             "type": "point",
             "pos": light_pos.tolist(),
-            "note": "Edit LIGHT_POS constant in rays_to_scene.py to reposition. Re-run rays_to_scene.py to update.",
+            "note": (
+                "Light set via --light override." if args.light is not None
+                else "Edit LIGHT_POS constant in rays_to_scene.py to reposition, or pass --light. Re-run to update."
+            ),
         },
         "fixed_point": {"W": int(args.wbits), "FRAC": int(args.frac)},
     }
